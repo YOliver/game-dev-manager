@@ -2,16 +2,35 @@
 
 使用 QListWidget（Icon Mode）实现精灵图缩略图网格，
 支持异步加载缩略图，避免阻塞 UI。
+
+使用自定义委托（ThumbnailDelegate）确保缩略图严格按方格排列，
+所有图标统一为 128x128 正方形显示，文件名居中对齐。
 """
 
 import os
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QIcon, QImage, QPixmap
-from PySide6.QtWidgets import QListWidget, QListWidgetItem, QWidget, QVBoxLayout
+from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QThreadPool, Signal
+from PySide6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QListWidget,
+    QListWidgetItem,
+    QStyledItemDelegate,
+    QWidget,
+    QVBoxLayout,
+    QStyle,
+)
 
 from gdm.core.models import SpriteInfo
+
+
+# 常量定义
+ICON_SIZE = 128          # 图标显示大小（像素）
+TEXT_HEIGHT = 40          # 文件名区域高度（像素）
+GRID_WIDTH = 160         # 网格宽度 = 图标128 + 左右padding各16
+GRID_HEIGHT = 184        # 网格高度 = 图标128 + 文字40 + 上下padding各8
+SPACING = 8             # 网格间距（像素）
 
 
 class _WorkerSignals(QObject):
@@ -27,7 +46,7 @@ class ThumbnailLoadWorker(QRunnable):
     通过信号将结果传递到主线程后转换为 QPixmap。
     """
 
-    def __init__(self, sprite: SpriteInfo, target_size: int = 128) -> None:
+    def __init__(self, sprite: SpriteInfo, target_size: int = ICON_SIZE) -> None:
         super().__init__()
         self.sprite = sprite
         self.target_size = target_size
@@ -47,11 +66,26 @@ class ThumbnailLoadWorker(QRunnable):
             )
             image.fill(Qt.GlobalColor.Gray)
         else:
-            image = image.scaled(
+            # 缩放到目标尺寸（保持宽高比，居中放置到正方形画布）
+            scaled = image.scaled(
                 QSize(self.target_size, self.target_size),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
+            # 创建正方形画布（透明背景）
+            square_image = QImage(
+                self.target_size,
+                self.target_size,
+                QImage.Format.Format_ARGB32,
+            )
+            square_image.fill(QColor(0, 0, 0, 0))  # 透明
+            # 居中绘制
+            x = (self.target_size - scaled.width()) // 2
+            y = (self.target_size - scaled.height()) // 2
+            painter = QPainter(square_image)
+            painter.drawImage(x, y, scaled)
+            painter.end()
+            image = square_image
 
         # 附加文件修改时间，供缓存验证使用
         try:
@@ -62,11 +96,93 @@ class ThumbnailLoadWorker(QRunnable):
         self.signals.finished.emit(file_path, image)
 
 
+class ThumbnailDelegate(QStyledItemDelegate):
+    """自定义委托，确保缩略图严格按方格排列显示。
+
+    每个项占据固定大小（GRID_WIDTH x GRID_HEIGHT）：
+    - 图标区域：ICON_SIZE x ICON_SIZE（居中显示）
+    - 文本区域：GRID_WIDTH x TEXT_HEIGHT（居中对齐，超长省略）
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,  # type: ignore[name-defined]
+        index: QModelIndex,  # type: ignore[name-defined]
+    ) -> None:
+        """绘制列表项（图标 + 文件名）。"""
+        # 保存 painter 状态
+        painter.save()
+
+        # 计算绘制区域
+        rect = option.rect
+        icon_rect = QRect(
+            rect.x() + (GRID_WIDTH - ICON_SIZE) // 2,
+            rect.y() + 8,
+            ICON_SIZE,
+            ICON_SIZE,
+        )
+        text_rect = QRect(
+            rect.x() + 4,
+            rect.y() + 8 + ICON_SIZE + 4,
+            GRID_WIDTH - 8,
+            TEXT_HEIGHT - 4,
+        )
+
+        # 绘制选中背景
+        if option.state & QStyle.State_Selected:  # type: ignore[attr-defined]
+            painter.fillRect(rect, option.palette.highlight())
+            painter.setPen(option.palette.highlightedText().color())
+        else:
+            painter.setPen(option.palette.text().color())
+
+        # 绘制图标
+        icon = index.data(Qt.ItemDataRole.DecorationRole)
+        if icon is not None:
+            if isinstance(icon, QIcon):
+                pixmap = icon.pixmap(QSize(ICON_SIZE, ICON_SIZE))
+            elif isinstance(icon, QPixmap):
+                pixmap = icon.scaled(
+                    QSize(ICON_SIZE, ICON_SIZE),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            else:
+                pixmap = QPixmap(ICON_SIZE, ICON_SIZE)
+                pixmap.fill(Qt.GlobalColor.Gray)
+            painter.drawPixmap(icon_rect, pixmap)
+
+        # 绘制文件名（居中，超长省略）
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if text is not None:
+            font_metrics = QFontMetrics(painter.font())
+            elided_text = font_metrics.elidedText(
+                text, Qt.TextElideMode.ElideRight, text_rect.width()
+            )
+            painter.drawText(
+                text_rect, Qt.AlignmentFlag.AlignCenter, elided_text
+            )
+
+        # 恢复 painter 状态
+        painter.restore()
+
+    def sizeHint(
+        self,
+        option: QStyleOptionViewItem,  # type: ignore[name-defined]
+        index: QModelIndex,  # type: ignore[name-defined]
+    ) -> QSize:
+        """返回固定大小，确保所有项排列整齐。"""
+        return QSize(GRID_WIDTH, GRID_HEIGHT)
+
+
 class ThumbnailView(QWidget):
     """缩略图网格视图。
 
     使用 QListWidget（Icon Mode）显示精灵图缩略图网格，
-    支持异步加载缩略图，避免阻塞 UI。
+    使用 ThumbnailDelegate 确保严格按方格排列。
 
     信号：
         selection_changed(SpriteInfo): 选中项变化时发射，携带对应的 SpriteInfo 对象
@@ -94,12 +210,19 @@ class ThumbnailView(QWidget):
 
         self._list_widget = QListWidget(self)
         self._list_widget.setViewMode(QListWidget.ViewMode.IconMode)
-        self._list_widget.setIconSize(QSize(128, 128))
-        self._list_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self._list_widget.setSpacing(8)
+        self._list_widget.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
+        self._list_widget.setGridSize(QSize(GRID_WIDTH, GRID_HEIGHT))
+        self._list_widget.setSpacing(SPACING)
+        self._list_widget.setUniformItemSizes(True)
+        self._list_widget.setWordWrap(False)
         self._list_widget.setSelectionMode(
             QListWidget.SelectionMode.SingleSelection
         )
+
+        # 使用自定义委托确保严格对齐
+        self._delegate = ThumbnailDelegate(self)
+        self._list_widget.setItemDelegate(self._delegate)
+
         self._list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
         layout.addWidget(self._list_widget)
@@ -214,16 +337,26 @@ class ThumbnailView(QWidget):
                 return cached
 
         # 同步加载（后备方案）
-        pixmap = QPixmap(file_path)
-        if pixmap.isNull():
-            pixmap = QPixmap(128, 128)
+        image = QImage(file_path)
+        if image.isNull():
+            pixmap = QPixmap(ICON_SIZE, ICON_SIZE)
             pixmap.fill(Qt.GlobalColor.Gray)
         else:
-            pixmap = pixmap.scaled(
-                QSize(128, 128),
+            # 缩放到目标尺寸（保持宽高比，居中放置到正方形画布）
+            scaled = image.scaled(
+                QSize(ICON_SIZE, ICON_SIZE),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
+            # 创建正方形画布（透明背景）
+            pixmap = QPixmap(ICON_SIZE, ICON_SIZE)
+            pixmap.fill(QColor(0, 0, 0, 0))  # 透明
+            # 居中绘制
+            x = (ICON_SIZE - scaled.width()) // 2
+            y = (ICON_SIZE - scaled.height()) // 2
+            painter = QPainter(pixmap)
+            painter.drawImage(x, y, scaled)
+            painter.end()
 
         try:
             pixmap._cache_mtime: Optional[float] = os.path.getmtime(file_path)
