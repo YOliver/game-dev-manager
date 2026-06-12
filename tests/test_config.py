@@ -48,22 +48,23 @@ class TestSaveConfig:
     @pytest.mark.skip(reason="权限错误测试跨平台较困难，需要特殊环境设置")
     def test_returns_false_on_permission_error(self, monkeypatch):
         """如果无法写入文件，应返回 False。"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.setenv("APPDATA", tmpdir)
-            config_path = get_config_path()
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        pass
 
-            # 创建只读目录（Windows 上可能不生效）
-            import stat
-            os.chmod(config_path.parent, stat.S_IREAD | stat.S_IEXEC)
+    def test_returns_false_for_non_dict_input(self):
+        """如果传入非字典参数，应返回 False。"""
+        result = save_config(None)
+        assert result is False
 
-            try:
-                config = {"last_folder": "C:\\test"}
-                result = save_config(config)
-                assert result is False
-            finally:
-                # 恢复权限以便清理
-                os.chmod(config_path.parent, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        result = save_config("string")
+        assert result is False
+
+        result = save_config([1, 2, 3])
+        assert result is False
+
+    def test_returns_false_for_non_serializable_input(self):
+        """如果传入不可序列化的对象，应返回 False。"""
+        result = save_config({"key": set([1, 2, 3])})  # set 不可 JSON 序列化
+        assert result is False
 
 
 class TestLoadConfig:
