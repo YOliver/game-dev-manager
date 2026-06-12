@@ -296,6 +296,7 @@ def _try_restore_project(self) -> None:
         return
 
     # 恢复 UI 状态（跳过再次保存，避免覆盖）
+    # 注意：此处不直接调用 _set_workspace()，因为后者会再次保存配置（冗余）
     self._project = Project(root_path=last_folder)
     self.project_panel.set_root(last_folder)
 
