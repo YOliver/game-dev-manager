@@ -3,6 +3,7 @@
 GDM 应用的主窗口，负责布局管理与信号协调。
 """
 
+import logging
 import os
 from typing import List, Optional
 
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Slot
 
+from gdm.core.config import load_config, save_config
 from gdm.core.models import Project, SpriteInfo
 from gdm.core.project import load as load_project, save as save_project
 from gdm.core.scanner import scan
@@ -21,6 +23,8 @@ from gdm.gui.detail_panel import DetailPanel
 from gdm.gui.project_panel import ProjectPanel
 from gdm.gui.rename_dialog import RenameDialog
 from gdm.gui.thumbnail_view import ThumbnailView
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -114,6 +118,12 @@ class MainWindow(QMainWindow):
         self._current_sprites = sprites
         self.thumbnail_view.load(sprites)
 
+        # 保存 last_folder 到全局配置
+        try:
+            save_config({"last_folder": folder})
+        except Exception as e:
+            logger.warning(f"保存配置失败: {e}")
+
         self._save_project()
 
     @Slot()
@@ -127,23 +137,30 @@ class MainWindow(QMainWindow):
     def _try_restore_project(self) -> None:
         """启动时尝试恢复上一次的工作区。
 
-        读取当前工作目录下的 .gdm.json，
-        如果不存在或其中记录的根目录已不存在，静默跳过。
+        从全局配置文件加载 last_folder，
+        如果不存在或其中记录的目录已不存在，静默跳过。
         """
-        config_path = os.path.join(os.getcwd(), ".gdm.json")
-
-        project = load_project(config_path)
-        if project is None:
+        config = load_config()
+        if config is None:
             return
 
-        if not os.path.isdir(project.root_path):
+        last_folder = config.get("last_folder")
+        if last_folder is None:
+            return
+
+        if not os.path.isdir(last_folder):
             return
 
         # 恢复 UI 状态（跳过再次保存，避免覆盖）
-        self._project = project
-        self.project_panel.set_root(project.root_path)
+        self._project = Project(root_path=last_folder)
+        self.project_panel.set_root(last_folder)
 
-        sprites = scan(project.root_path, recursive=False)
+        try:
+            sprites = scan(last_folder, recursive=False)
+        except Exception as e:
+            logger.warning(f"扫描文件夹失败: {last_folder}, 错误: {e}")
+            sprites = []
+
         self._current_sprites = sprites
         self.thumbnail_view.load(sprites)
 
