@@ -5,8 +5,8 @@
 
 from typing import List, Optional, Tuple
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,

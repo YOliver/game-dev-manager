@@ -7,16 +7,9 @@
 import os
 from typing import Dict, List, Optional
 
-from PyQt6.QtCore import (
-    QObject,
-    QRunnable,
-    QSize,
-    Qt,
-    QThreadPool,
-    pyqtSignal,
-)
-from PyQt6.QtGui import QIcon, QImage, QPixmap
-from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QWidget, QVBoxLayout
+from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, Signal
+from PySide6.QtGui import QIcon, QImage, QPixmap
+from PySide6.QtWidgets import QListWidget, QListWidgetItem, QWidget, QVBoxLayout
 
 from gdm.core.models import SpriteInfo
 
