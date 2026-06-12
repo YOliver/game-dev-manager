@@ -33,6 +33,7 @@ MAX_WIDTH = 176           # 网格最大宽度（像素），防止间距过大
 BASE_GRID_WIDTH = 160     # 基础网格宽度，用于初始列数推算
 GRID_HEIGHT = 184        # 网格高度 = 图标128 + 文字40 + 上下padding各8
 SPACING = 8             # 网格间距（像素）
+GRID_WIDTH = BASE_GRID_WIDTH  # 向后兼容，Task 2/3 会清理引用
 
 
 class _WorkerSignals(QObject):
