@@ -129,7 +129,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.warning(f"保存配置失败: {e}")
 
-        self._save_project()
+        # 保存项目文件
+        try:
+            self._save_project()
+        except Exception as e:
+            logger.warning(f"保存项目失败: {e}")
 
     @Slot()
     def _save_project(self) -> None:
