@@ -6,9 +6,9 @@
 
 | 项目 | 内容 |
 |------|------|
-| 开发者 | oliveryin |
-| 邮箱 | oliveryin@tencent.com |
-| GitHub | 未设置远程仓库 |
+| 开发者 | YOliver |
+| 邮箱 | 740614279@qq.com |
+| GitHub | git@github.com:YOliver/game-dev-manager.git |
 
 ## 功能特性
 
