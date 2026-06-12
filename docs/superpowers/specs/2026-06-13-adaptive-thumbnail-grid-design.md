@@ -29,11 +29,17 @@ BASE_GRID_WIDTH = 160
 
 cols = max(1, available_width // (BASE_GRID_WIDTH + SPACING))
 grid_width = (available_width // cols) - SPACING
-grid_width = clamp(grid_width, MIN_WIDTH, MAX_WIDTH)
 
-# 如被 clamp，重新确定列数
-cols = max(1, available_width // (grid_width + SPACING))
-grid_width = (available_width // cols) - SPACING
+# 如果超出范围，调整列数后重算
+if grid_width < MIN_WIDTH or grid_width > MAX_WIDTH:
+    if grid_width > MAX_WIDTH:
+        cols += 1  # 增加列数来缩窄网格
+    elif grid_width < MIN_WIDTH:
+        cols = max(1, cols - 1)  # 减少列数来加宽网格
+    grid_width = (available_width // cols) - SPACING
+
+# 最终 clamp 保底
+grid_width = clamp(grid_width, MIN_WIDTH, MAX_WIDTH)
 ```
 
 ### 边界值
@@ -72,9 +78,13 @@ grid_width = (available_width // cols) - SPACING
 
 在 `ThumbnailView` 中重写 `resizeEvent`：
 
-- **首次 resize**：立即触发 `_relayout()`
-- **连续拖拽**：用 `QTimer.singleShot(80)` 防抖，停止拖拽后执行一次
-- **重排操作**：计算新网格宽度 → `setGridSize()` → 恢复滚动条位置
+- 每次 resize 使用 `QTimer.singleShot(80, self._relayout)` 防抖
+- 连续拖拽时前一个定时器自动取消，停止后 80ms 执行一次
+- 80ms 延迟用户无感知，保证了实现简洁
+- `_relayout()` 内：计算新网格宽度 → `setGridSize()` → 恢复滚动条位置
+
+`load()` 末尾追加调用 `_relayout()`，确保新加载的内容按当前窗口宽度
+初始排列。
 
 ## 滚动位置保持
 
