@@ -109,6 +109,7 @@ class ThumbnailDelegate(QStyledItemDelegate):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._grid_width = BASE_GRID_WIDTH  # 默认值，由 ThumbnailView 更新
 
     def paint(
         self,
@@ -123,7 +124,7 @@ class ThumbnailDelegate(QStyledItemDelegate):
         # 计算绘制区域
         rect = option.rect
         icon_rect = QRect(
-            rect.x() + (GRID_WIDTH - ICON_SIZE) // 2,
+            rect.x() + (rect.width() - ICON_SIZE) // 2,
             rect.y() + 8,
             ICON_SIZE,
             ICON_SIZE,
@@ -131,7 +132,7 @@ class ThumbnailDelegate(QStyledItemDelegate):
         text_rect = QRect(
             rect.x() + 4,
             rect.y() + 8 + ICON_SIZE + 4,
-            GRID_WIDTH - 8,
+            rect.width() - 8,
             TEXT_HEIGHT - 4,
         )
 
@@ -177,8 +178,8 @@ class ThumbnailDelegate(QStyledItemDelegate):
         option: QStyleOptionViewItem,  # type: ignore[name-defined]
         index: QModelIndex,  # type: ignore[name-defined]
     ) -> QSize:
-        """返回固定大小，确保所有项排列整齐。"""
-        return QSize(GRID_WIDTH, GRID_HEIGHT)
+        """返回当前网格宽度（由 ThumbnailView 更新）。"""
+        return QSize(self._grid_width, GRID_HEIGHT)
 
 
 class ThumbnailView(QWidget):
