@@ -44,7 +44,7 @@
 - ✅ Center panel (ThumbnailView) shows nothing
 - ✅ Right panel (DetailPanel) shows "No preview"
 
-**Pass/Fail:** ________
+**Pass/Fail:** ✅ Pass
 
 ---
 
@@ -71,7 +71,7 @@
   }
   ```
 
-**Pass/Fail:** ________
+**Pass/Fail:** ✅ Pass
 
 ---
 
