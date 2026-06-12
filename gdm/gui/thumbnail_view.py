@@ -28,7 +28,9 @@ from gdm.core.models import SpriteInfo
 # 常量定义
 ICON_SIZE = 128          # 图标显示大小（像素）
 TEXT_HEIGHT = 40          # 文件名区域高度（像素）
-GRID_WIDTH = 160         # 网格宽度 = 图标128 + 左右padding各16
+MIN_WIDTH = 140           # 网格最小宽度（像素），保证文字区可读
+MAX_WIDTH = 176           # 网格最大宽度（像素），防止间距过大
+BASE_GRID_WIDTH = 160     # 基础网格宽度，用于初始列数推算
 GRID_HEIGHT = 184        # 网格高度 = 图标128 + 文字40 + 上下padding各8
 SPACING = 8             # 网格间距（像素）
 
@@ -189,6 +191,37 @@ class ThumbnailView(QWidget):
     """
 
     selection_changed = Signal(object)
+
+    @staticmethod
+    def _calculate_grid(available_width: int) -> tuple[int, int]:
+        """根据可用宽度计算网格宽度和列数。
+
+        Args:
+            available_width: QListWidget viewport 可用宽度（像素）
+
+        Returns:
+            (grid_width, cols) 元组，grid_width 在 [MIN_WIDTH, MAX_WIDTH] 范围内
+        """
+        if available_width <= 0:
+            return BASE_GRID_WIDTH, 1
+
+        # 1. 粗算列数
+        cols = max(1, available_width // (BASE_GRID_WIDTH + SPACING))
+
+        # 2. 试算网格宽度
+        grid_width = (available_width // cols) - SPACING
+
+        # 3. 如超出范围，调整列数后重算
+        if grid_width > MAX_WIDTH:
+            cols += 1
+            grid_width = (available_width // cols) - SPACING
+        elif grid_width < MIN_WIDTH and cols > 1:
+            cols -= 1
+            grid_width = (available_width // cols) - SPACING
+
+        # 4. 最终 clamp 保底
+        grid_width = max(MIN_WIDTH, min(MAX_WIDTH, grid_width))
+        return grid_width, cols
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
