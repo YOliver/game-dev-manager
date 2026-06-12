@@ -317,6 +317,9 @@ class ThumbnailView(QWidget):
         for sprite in sprites:
             self._load_thumbnail_async(sprite)
 
+        # 根据当前窗口宽度进行自适应排列
+        self._relayout()
+
     def _load_thumbnail_async(self, sprite: SpriteInfo) -> None:
         """异步加载单个精灵图的缩略图。
 
