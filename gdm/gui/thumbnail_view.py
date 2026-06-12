@@ -10,7 +10,7 @@
 import os
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QThreadPool, Signal
+from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -238,6 +238,12 @@ class ThumbnailView(QWidget):
 
         self._init_ui()
 
+        # 防抖定时器：窗口连续 resize 时延迟触发布局重排
+        self._relayout_timer = QTimer(self)
+        self._relayout_timer.setSingleShot(True)
+        self._relayout_timer.setInterval(80)
+        self._relayout_timer.timeout.connect(self._relayout)
+
     def _init_ui(self) -> None:
         """初始化 UI 组件。"""
         layout = QVBoxLayout(self)
@@ -261,6 +267,34 @@ class ThumbnailView(QWidget):
         self._list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
         layout.addWidget(self._list_widget)
+
+    def _relayout(self) -> None:
+        """根据当前视图宽度重新计算并应用网格布局。
+
+        计算最优网格宽度，更新 delegate，保留滚动位置。
+        """
+        if not self._sprites:
+            return
+
+        available_width = self._list_widget.viewport().width()
+        grid_width, _ = self._calculate_grid(available_width)
+
+        # 更新委托的网格宽度（确保 sizeHint 返回正确值）
+        self._delegate._grid_width = grid_width
+
+        # 保存滚动位置
+        scroll_pos = self._list_widget.verticalScrollBar().value()
+
+        # 应用新网格大小
+        self._list_widget.setGridSize(QSize(grid_width, GRID_HEIGHT))
+
+        # 恢复滚动位置
+        self._list_widget.verticalScrollBar().setValue(scroll_pos)
+
+    def resizeEvent(self, event) -> None:
+        """窗口尺寸变化时，防抖触发布局重排。"""
+        super().resizeEvent(event)
+        self._relayout_timer.start()
 
     def load(self, sprites: List[SpriteInfo]) -> None:
         """加载精灵图列表到网格视图。
