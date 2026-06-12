@@ -33,7 +33,6 @@ MAX_WIDTH = 176           # 网格最大宽度（像素），防止间距过大
 BASE_GRID_WIDTH = 160     # 基础网格宽度，用于初始列数推算
 GRID_HEIGHT = 184        # 网格高度 = 图标128 + 文字40 + 上下padding各8
 SPACING = 8             # 网格间距（像素）
-GRID_WIDTH = BASE_GRID_WIDTH  # 向后兼容，Task 2/3 会清理引用
 
 
 class _WorkerSignals(QObject):
@@ -102,9 +101,9 @@ class ThumbnailLoadWorker(QRunnable):
 class ThumbnailDelegate(QStyledItemDelegate):
     """自定义委托，确保缩略图严格按方格排列显示。
 
-    每个项占据固定大小（GRID_WIDTH x GRID_HEIGHT）：
+    每个项占据固定的 GRID_HEIGHT，网格宽度动态计算：
     - 图标区域：ICON_SIZE x ICON_SIZE（居中显示）
-    - 文本区域：GRID_WIDTH x TEXT_HEIGHT（居中对齐，超长省略）
+    - 文本区域：rect.width() x TEXT_HEIGHT（居中对齐，超长省略）
     """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -252,7 +251,8 @@ class ThumbnailView(QWidget):
         self._list_widget = QListWidget(self)
         self._list_widget.setViewMode(QListWidget.ViewMode.IconMode)
         self._list_widget.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
-        self._list_widget.setGridSize(QSize(GRID_WIDTH, GRID_HEIGHT))
+        # 初始网格大小（_relayout() 会在 load() 后立即更新为最优值）
+        self._list_widget.setGridSize(QSize(BASE_GRID_WIDTH, GRID_HEIGHT))
         self._list_widget.setSpacing(SPACING)
         self._list_widget.setUniformItemSizes(True)
         self._list_widget.setWordWrap(False)

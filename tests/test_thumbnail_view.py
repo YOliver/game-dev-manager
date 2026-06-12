@@ -65,3 +65,16 @@ def test_calculate_grid_just_right():
     # 6 cols → 1008//6 - 8 = 160
     assert grid_w == 160
     assert cols == 6
+
+
+def test_calculate_grid_zero_width():
+    """零宽度或负宽度应返回兜底值。"""
+    from gdm.gui.thumbnail_view import ThumbnailView
+
+    grid_w_0, cols_0 = ThumbnailView._calculate_grid(0)
+    assert grid_w_0 == 160
+    assert cols_0 == 1
+
+    grid_w_neg, cols_neg = ThumbnailView._calculate_grid(-10)
+    assert grid_w_neg == 160
+    assert cols_neg == 1
