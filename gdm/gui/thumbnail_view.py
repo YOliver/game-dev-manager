@@ -17,7 +17,7 @@ from gdm.core.models import SpriteInfo
 class _WorkerSignals(QObject):
     """Worker 内部信号类（必须在 QRunnable 外部定义，否则无法 emit）。"""
 
-    finished = pyqtSignal(str, object)  # file_path, QImage | None
+    finished = Signal(str, object)  # file_path, QImage | None
 
 
 class ThumbnailLoadWorker(QRunnable):
@@ -72,7 +72,7 @@ class ThumbnailView(QWidget):
         selection_changed(SpriteInfo): 选中项变化时发射，携带对应的 SpriteInfo 对象
     """
 
-    selection_changed = pyqtSignal(object)
+    selection_changed = Signal(object)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)

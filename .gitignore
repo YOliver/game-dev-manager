@@ -1,0 +1,11 @@
+build/
+dist/
+installer/
+__pycache__/
+*.spec
+*.pyc
+.env
+.codebuddy
+*.egg-info/
+.eggs/
+*.egg

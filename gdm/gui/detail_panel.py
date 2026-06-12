@@ -58,8 +58,9 @@ class DetailPanel(QWidget):
             self._preview_label, 0, Qt.AlignmentFlag.AlignCenter
         )
 
-        # 单张信息：元数据表单
-        self._form_layout = QFormLayout()
+        # 单张信息：元数据表单（放在容器 widget 中以便显示/隐藏）
+        self._form_container = QWidget()
+        self._form_layout = QFormLayout(self._form_container)
         self._form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self._form_layout.setSpacing(4)
 
@@ -79,7 +80,7 @@ class DetailPanel(QWidget):
         self._form_layout.addRow("色彩模式：", self._color_mode_label)
         self._form_layout.addRow("路径：", self._path_label)
 
-        self._content_layout.addLayout(self._form_layout)
+        self._content_layout.addWidget(self._form_container)
 
         # 多张信息：汇总标签
         self._summary_label = QLabel()
@@ -108,7 +109,7 @@ class DetailPanel(QWidget):
         self._path_label.setText("-")
         self._summary_label.setText("")
         self._summary_label.setVisible(False)
-        self._form_layout.setVisible(True)
+        self._form_container.setVisible(True)
 
     def update(self, sprite: SpriteInfo) -> None:
         """更新面板，显示单张精灵图信息。
@@ -116,7 +117,7 @@ class DetailPanel(QWidget):
         Args:
             sprite: 精灵图信息对象
         """
-        self._form_layout.setVisible(True)
+        self._form_container.setVisible(True)
         self._summary_label.setVisible(False)
 
         # 预览图：256x256 区域内等比例缩放
@@ -146,7 +147,7 @@ class DetailPanel(QWidget):
         Args:
             sprites: 精灵图信息对象列表
         """
-        self._form_layout.setVisible(False)
+        self._form_container.setVisible(False)
         self._summary_label.setVisible(True)
 
         # 清空预览图区域，显示选中数量提示

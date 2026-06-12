@@ -42,7 +42,7 @@ class RenameDialog(QDialog):
             携带旧路径列表和更新后的 SpriteInfo 对象列表
     """
 
-    renamed = pyqtSignal(list, list)
+    renamed = Signal(list, list)
 
     def __init__(
         self, sprites: List[SpriteInfo], parent: Optional[QWidget] = None
