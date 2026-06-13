@@ -28,14 +28,23 @@ logger = logging.getLogger(__name__)
 
 
 class ScanWorker(QObject):
-    """后台扫描工作器，在 QThread 中运行。"""
-    progress = Signal(int, int)  # current, total
-    finished = Signal(object)    # List[SpriteInfo]
+    """后台扫描工作器，在 QThread 中运行。
 
-    def __init__(self, folder: str, recursive: bool = True):
+    携带代际编号，扫描完成时附带该编号，供主窗口判断是否为最新扫描。
+    """
+    progress = Signal(int, int)  # current, total
+    finished = Signal(object)    # (List[SpriteInfo], int) — sprites, generation
+
+    def __init__(self, folder: str, generation: int, recursive: bool = True):
         super().__init__()
         self._folder = folder
+        self._generation = generation
         self._recursive = recursive
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """标记取消，扫描完成后不会 emit finish 信号。"""
+        self._cancelled = True
 
     def run(self):
         """在工作线程中执行扫描。"""
@@ -46,10 +55,12 @@ class ScanWorker(QObject):
                 self._recursive,
                 progress_callback=lambda c, t: self.progress.emit(c, t),
             )
-            self.finished.emit(sprites)
+            if not self._cancelled:
+                self.finished.emit((sprites, self._generation))
         except Exception as e:
             logger.warning(f"后台扫描失败: {self._folder}, 错误: {e}")
-            self.finished.emit([])
+            if not self._cancelled:
+                self.finished.emit(([], self._generation))
 
 
 class MainWindow(QMainWindow):
@@ -64,6 +75,7 @@ class MainWindow(QMainWindow):
         self._project: Optional[Project] = None
         self._current_sprites: List[SpriteInfo] = []
         self._scan_thread = None  # 后台扫描线程
+        self._scan_generation = 0  # 扫描代际，递增
         self._init_ui()
         self._try_restore_project()
 
@@ -144,51 +156,47 @@ class MainWindow(QMainWindow):
 
     def _start_scan(self, folder: str, on_finished) -> None:
         """启动后台扫描线程。"""
-        # 断开旧工作器的信号，防止完成后触发错误回调或访问已销毁对象
+        # 取消旧扫描（标记取消）
         old_worker = getattr(self, '_scan_worker', None)
         if old_worker is not None:
-            try:
-                old_worker.finished.disconnect(self._on_scan_completed)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                old_worker.progress.disconnect(self.thumbnail_view.update_progress)
-            except (TypeError, RuntimeError):
-                pass
+            old_worker.cancel()
 
-        # 保存旧线程引用，让它在工作器完成后自行清理
+        # 旧线程引用清空，让其自行完成并清理
         old_thread = self._scan_thread
-        if old_thread is not None:
-            old_thread.requestInterruption()
+        self._scan_thread = None
+
+        # 递增代际，新扫描生成唯一编号
+        self._scan_generation += 1
+        generation = self._scan_generation
 
         self._scan_on_finished = on_finished
         self._scan_thread = QThread()
-        self._scan_worker = ScanWorker(folder)
+        self._scan_worker = ScanWorker(folder, generation)
         self._scan_worker.moveToThread(self._scan_thread)
         self._scan_thread.started.connect(self._scan_worker.run)
         self._scan_worker.progress.connect(self.thumbnail_view.update_progress)
         self._scan_worker.finished.connect(self._on_scan_completed)
         self._scan_worker.finished.connect(self._scan_thread.quit)
         self._scan_worker.finished.connect(self._scan_worker.deleteLater)
-        self._scan_thread.finished.connect(self._on_thread_finished)
+        self._scan_thread.finished.connect(self._scan_thread.deleteLater)
         self._scan_thread.start()
 
-        # 旧线程完成后自行清理（不 deleteLater，避免工作器仍在运行时线程被销毁）
+        # 旧线程在完成后自行清理
         if old_thread is not None:
             old_thread.finished.connect(old_thread.deleteLater)
+        if old_worker is not None:
+            old_worker.finished.connect(old_worker.deleteLater)
 
-    def _on_scan_completed(self, sprites) -> None:
-        """扫描完成 — 在主线程执行（由 Qt 信号自动队列）。"""
+    def _on_scan_completed(self, result) -> None:
+        """扫描完成 — 在主线程执行。
+
+        检查代际编号，只有最新扫描的结果才会应用到 UI。
+        """
+        sprites, generation = result
+        if generation != self._scan_generation:
+            return  # 旧扫描结果，丢弃
         if hasattr(self, '_scan_on_finished') and self._scan_on_finished:
             self._scan_on_finished(sprites)
-
-    def _on_thread_finished(self) -> None:
-        """线程结束清理。"""
-        thread = self.sender()
-        # 只清理当前 active 的线程，忽略旧线程的残留信号
-        if thread is self._scan_thread:
-            thread.deleteLater()
-            self._scan_thread = None
 
     def _set_workspace(self, folder: str) -> None:
         """设置工作区根目录，后台扫描并加载精灵图。"""
