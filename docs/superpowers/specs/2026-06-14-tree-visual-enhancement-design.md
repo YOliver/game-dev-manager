@@ -22,6 +22,10 @@ QTreeWidget::item:selected {
     background-color: #0078d4;
     color: white;
 }
+QTreeWidget::item:selected:active {
+    background-color: #0078d4;
+    color: white;
+}
 ```
 
 蓝底白字，确保与被选中的目录名有足够对比度。
@@ -32,8 +36,8 @@ QTreeWidget::item:selected {
 
 ```
 set_root(path)
-  ├─ scan(path, recursive=True)  → 获取所有图片路径
-  ├─ 提取图片所在目录及所有父目录 → 构建集合
+  ├─ _build_img_dirs(path) — 轻量扩展名扫描
+  ├─ 构建 _img_dirs 集合
   └─ _populate_tree() 中检查每个目录 → 命中的标绿
 ```
 
@@ -41,34 +45,44 @@ set_root(path)
 
 | 项 | 内容 |
 |------|------|
-| 新增 import | `QColor`（`PySide6.QtGui`）、`scan`（`gdm.core.scanner`） |
+| 新增 import | `QColor`（`PySide6.QtGui`）、`SUPPORTED_EXTENSIONS`（`gdm.core.scanner`） |
 | 新增属性 | `self._img_dirs: set[str]` — 含图片的目录路径集合 |
-| `set_root()` | 先调用 `scan(path, recursive=True)`，遍历结果提取所有目录及其父目录 |
-| `_populate_tree()` | 对每个子目录检查 `str(entry)` 是否在 `_img_dirs` 中，是则 `setForeground(0, QColor("#22c55e"))`（绿色） |
+| 新增常量 | `_GREEN = QColor("#22c55e")` — 绿色字体类常量 |
+| `set_root()` | 调用 `_build_img_dirs(path)` 构建集合，根节点命中则 `setForeground(0, self._GREEN)` |
+| `_populate_tree()` | 对每个子目录检查 `str(entry)` 是否在 `_img_dirs` 中，是则 `setForeground(0, self._GREEN)` |
 
-### 目录集合算法
+### 轻量扫描算法
+
+实际实现不使用 `scanner.scan()`（避免 PIL 元数据开销），仅检查文件扩展名：
 
 ```python
-def _build_img_dirs(self, root_path: str) -> set[str]:
-    """扫描 root_path 下所有图片，返回包含图片的目录及其所有父目录的集合。"""
-    img_dirs: set[str] = set()
-    sprites = scan(root_path, recursive=True)
-    for sprite in sprites:
-        dir_path = os.path.dirname(sprite.file_path)
-        # 添加该目录及其所有父目录
-        while dir_path and dir_path != root_path:
-            img_dirs.add(dir_path)
-            dir_path = os.path.dirname(dir_path)
-        if dir_path == root_path or dir_path == "":
-            img_dirs.add(root_path)
-    return img_dirs
+    def _build_img_dirs(self, root_path: str) -> set[str]:
+        """轻量扫描，仅检查扩展名，返回含图片的目录及所有父目录。"""
+        from gdm.core.scanner import SUPPORTED_EXTENSIONS
+        img_dirs: set[str] = set()
+        root = Path(root_path)
+        try:
+            for file_path in root.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    img_dirs.add(str(file_path.parent))
+        except PermissionError:
+            pass
+        # 补全所有父目录
+        all_parents: set[str] = set(img_dirs)
+        for d in img_dirs:
+            parent = Path(d).parent
+            while str(parent) != root_path and str(parent) not in all_parents:
+                all_parents.add(str(parent))
+                parent = parent.parent
+        if img_dirs:
+            all_parents.add(root_path)
+        return all_parents
 ```
 
 ### 不变的部分
 
 - 信号 `folder_selected` 不变
 - 主窗口布局不变
-- 扫描逻辑（`scanner.scan()`）不变
 - 目录树折叠/展开行为不变
 
 ## 验证标准
