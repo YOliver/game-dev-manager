@@ -4,7 +4,7 @@
 """
 
 from pathlib import Path
-from typing import List
+from typing import Callable, List, Optional
 
 from gdm.core.models import SpriteInfo
 from gdm.core.metadata import extract
@@ -34,5 +34,44 @@ def scan(directory: str, recursive: bool = False) -> List[SpriteInfo]:
     for file_path in path.glob(pattern):
         if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
             sprites.append(extract(str(file_path)))
+
+    return sprites
+
+
+def scan_with_progress(
+    directory: str,
+    recursive: bool = True,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> List[SpriteInfo]:
+    """带进度回调的扫描函数，先快速统计总数，再逐张提取元数据。
+
+    Args:
+        directory: 要扫描的目录路径
+        recursive: 是否递归扫描子目录
+        progress_callback: 进度回调，参数为 (已处理数, 总数)
+
+    Returns:
+        包含所有图片元数据的 SpriteInfo 列表。
+    """
+    path = Path(directory)
+    if not path.is_dir():
+        return []
+
+    pattern = "**/*" if recursive else "*"
+
+    # 阶段1：收集所有图片路径（仅检查扩展名，不读取内容）
+    image_paths: list[str] = []
+    for file_path in path.glob(pattern):
+        if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            image_paths.append(str(file_path))
+
+    total = len(image_paths)
+
+    # 阶段2：逐张提取元数据
+    sprites: List[SpriteInfo] = []
+    for i, fp in enumerate(image_paths):
+        sprites.append(extract(fp))
+        if progress_callback:
+            progress_callback(i + 1, total)
 
     return sprites
