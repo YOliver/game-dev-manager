@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         self.project_panel.set_root(folder)
 
         try:
-            sprites = scan(folder, recursive=False)
+            sprites = scan(folder, recursive=True)
         except Exception as e:
             logger.warning(f"扫描文件夹失败: {folder}, 错误: {e}")
             sprites = []
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
         self.project_panel.set_root(last_folder)
 
         try:
-            sprites = scan(last_folder, recursive=False)
+            sprites = scan(last_folder, recursive=True)
         except Exception as e:
             logger.warning(f"扫描文件夹失败: {last_folder}, 错误: {e}")
             sprites = []
@@ -180,7 +180,7 @@ class MainWindow(QMainWindow):
     def _on_folder_selected(self, folder_path: str) -> None:
         """左侧面板选中文件夹回调，加载该文件夹的精灵图到缩略图视图。"""
         try:
-            sprites = scan(folder_path, recursive=False)
+            sprites = scan(folder_path, recursive=True)
         except Exception as e:
             logger.warning(f"扫描文件夹失败: {folder_path}, 错误: {e}")
             sprites = []
