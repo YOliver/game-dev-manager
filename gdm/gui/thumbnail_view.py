@@ -14,6 +14,7 @@ from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QT
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -35,6 +36,8 @@ MAX_WIDTH = 176           # 网格最大宽度（像素），防止间距过大
 BASE_GRID_WIDTH = 160     # 基础网格宽度，用于初始列数推算
 GRID_HEIGHT = 184        # 网格高度 = 图标128 + 文字40 + 上下padding各8
 SPACING = 8             # 网格间距（像素）
+MAX_CACHE_SIZE = 500     # 缩略图缓存上限（LRU 淘汰）
+BATCH_SIZE = 60          # 每批提交的缩略图加载任务数
 
 
 class _WorkerSignals(QObject):
@@ -380,9 +383,13 @@ class ThumbnailView(QWidget):
             self._list_widget.addItem(item)
             self._items[sprite.file_path] = item
 
-        # 异步加载所有缩略图
-        for sprite in sprites:
-            self._load_thumbnail_async(sprite)
+        # 分批异步加载缩略图，避免回调集中爆发拖慢 UI
+        for i in range(0, len(sprites), BATCH_SIZE):
+            batch = sprites[i:i + BATCH_SIZE]
+            for sprite in batch:
+                self._load_thumbnail_async(sprite)
+            # 每批提交后刷新事件，让已完成回调得到处理
+            QApplication.processEvents()
 
         # 根据当前窗口宽度进行自适应排列
         self._relayout()
@@ -450,6 +457,10 @@ class ThumbnailView(QWidget):
         except AttributeError:
             pixmap._cache_mtime = None
 
+        # LRU 缓存淘汰：超出上限时移除最早插入的
+        if len(self._thumbnails) >= MAX_CACHE_SIZE:
+            oldest_key = next(iter(self._thumbnails))
+            del self._thumbnails[oldest_key]
         self._thumbnails[file_path] = pixmap
         item = self._items.get(file_path)
         if item is not None:
