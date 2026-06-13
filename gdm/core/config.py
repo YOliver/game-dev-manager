@@ -46,15 +46,18 @@ def load_config() -> Optional[dict]:
 
 
 def save_config(config: dict) -> bool:
-    """保存配置到文件，成功返回 True。"""
+    """保存配置到文件（原子写入），成功返回 True。"""
     if not isinstance(config, dict):
         logger.error("配置必须是字典类型")
         return False
 
     config_path = get_config_path()
+    tmp_path = config_path + ".tmp"
     try:
-        with open(config_path, "w", encoding="utf-8") as f:
+        # 先写入临时文件，再原子重命名，避免崩溃留下半截无效 JSON
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, config_path)
         return True
     except TypeError as e:
         logger.error(f"配置包含不可序列化的数据: {e}")
@@ -62,3 +65,10 @@ def save_config(config: dict) -> bool:
     except OSError as e:
         logger.error(f"写入配置文件失败: {config_path}, 错误: {e}")
         return False
+    finally:
+        # 清理残留的临时文件
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
