@@ -14,18 +14,38 @@ from PySide6.QtWidgets import (
     QSplitter,
     QWidget,
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 
 from gdm.core.config import load_config, save_config
 from gdm.core.models import Project, SpriteInfo
 from gdm.core.project import load as load_project, save as save_project
-from gdm.core.scanner import scan
 from gdm.gui.detail_panel import DetailPanel
 from gdm.gui.project_panel import ProjectPanel
 from gdm.gui.rename_dialog import RenameDialog
 from gdm.gui.thumbnail_view import ThumbnailView
 
 logger = logging.getLogger(__name__)
+
+
+class ScanWorker(QObject):
+    """后台扫描工作器，在 QThread 中运行。"""
+    progress = Signal(int, int)  # current, total
+    finished = Signal(object)    # List[SpriteInfo]
+
+    def __init__(self, folder: str, recursive: bool = True):
+        super().__init__()
+        self._folder = folder
+        self._recursive = recursive
+
+    def run(self):
+        """在工作线程中执行扫描。"""
+        from gdm.core.scanner import scan_with_progress
+        sprites = scan_with_progress(
+            self._folder,
+            self._recursive,
+            progress_callback=lambda c, t: self.progress.emit(c, t),
+        )
+        self.finished.emit(sprites)
 
 
 class MainWindow(QMainWindow):
@@ -117,21 +137,47 @@ class MainWindow(QMainWindow):
             return
         self._set_workspace(folder)
 
+    def _start_scan(self, folder: str, on_finished) -> None:
+        """启动后台扫描线程。
+
+        Args:
+            folder: 要扫描的文件夹路径
+            on_finished: 扫描完成回调，接收 List[SpriteInfo] 参数
+        """
+        # 取消之前的扫描（如果仍在运行）
+        if hasattr(self, '_scan_thread') and self._scan_thread is not None:
+            self._scan_thread.quit()
+            self._scan_thread.wait()
+
+        self._scan_thread = QThread()
+        self._scan_worker = ScanWorker(folder)
+        self._scan_worker.moveToThread(self._scan_thread)
+        self._scan_thread.started.connect(self._scan_worker.run)
+        self._scan_worker.progress.connect(self.thumbnail_view.update_progress)
+        self._scan_worker.finished.connect(lambda sprites: on_finished(sprites))
+        self._scan_worker.finished.connect(self._scan_thread.quit)
+        self._scan_worker.finished.connect(self._scan_worker.deleteLater)
+        self._scan_thread.finished.connect(self._scan_thread.deleteLater)
+        self._scan_thread.start()
+
     def _set_workspace(self, folder: str) -> None:
-        """设置工作区根目录，扫描并加载精灵图。"""
+        """设置工作区根目录，后台扫描并加载精灵图。"""
         self._project = Project(root_path=folder)
         self.project_panel.set_root(folder)
 
-        try:
-            sprites = scan(folder, recursive=True)
-        except Exception as e:
-            logger.warning(f"扫描文件夹失败: {folder}, 错误: {e}")
-            sprites = []
+        # 显示进度界面
+        self.thumbnail_view.show_progress()
 
+        # 启动后台扫描
+        self._start_scan(folder, on_finished=self._on_workspace_scan_finished)
+
+    def _on_workspace_scan_finished(self, sprites) -> None:
+        """_set_workspace 扫描完成回调。"""
         self._current_sprites = sprites
         self.thumbnail_view.load(sprites)
 
         # 保存 last_folder 到全局配置
+        folder = self._project.root_path
         try:
             save_config({"last_folder": folder})
         except Exception as e:
@@ -152,11 +198,7 @@ class MainWindow(QMainWindow):
         save_project(self._project, config_path)
 
     def _try_restore_project(self) -> None:
-        """启动时尝试恢复上一次的工作区。
-
-        从全局配置文件加载 last_folder，
-        如果不存在或其中记录的目录已不存在，静默跳过。
-        """
+        """启动时尝试恢复上一次的工作区。"""
         config = load_config()
         if config is None:
             return
@@ -172,12 +214,14 @@ class MainWindow(QMainWindow):
         self._project = Project(root_path=last_folder)
         self.project_panel.set_root(last_folder)
 
-        try:
-            sprites = scan(last_folder, recursive=True)
-        except Exception as e:
-            logger.warning(f"扫描文件夹失败: {last_folder}, 错误: {e}")
-            sprites = []
+        # 显示进度界面
+        self.thumbnail_view.show_progress()
 
+        # 启动后台扫描
+        self._start_scan(last_folder, on_finished=self._on_restore_scan_finished)
+
+    def _on_restore_scan_finished(self, sprites) -> None:
+        """_try_restore_project 扫描完成回调（不保存配置）。"""
         self._current_sprites = sprites
         self.thumbnail_view.load(sprites)
 
@@ -186,12 +230,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
 
     def _on_folder_selected(self, folder_path: str) -> None:
-        """左侧面板选中文件夹回调，加载该文件夹的精灵图到缩略图视图。"""
-        try:
-            sprites = scan(folder_path, recursive=True)
-        except Exception as e:
-            logger.warning(f"扫描文件夹失败: {folder_path}, 错误: {e}")
-            sprites = []
+        """左侧面板选中文件夹回调，后台扫描并加载精灵图。"""
+        self.thumbnail_view.show_progress()
+        self._start_scan(folder_path, on_finished=self._on_tree_scan_finished)
+
+    def _on_tree_scan_finished(self, sprites) -> None:
+        """左侧树点击扫描完成回调（不保存配置）。"""
         self._current_sprites = sprites
         self.thumbnail_view.load(sprites)
 

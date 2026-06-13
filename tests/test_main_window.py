@@ -21,9 +21,11 @@ def qapp():
 
 @pytest.fixture
 def mock_scan():
-    """模拟 scan 函数，返回空的精灵图列表。"""
-    with patch("gdm.gui.main_window.scan") as mock:
-        mock.return_value = []
+    """模拟扫描过程，同步调用完成回调以返回空列表。"""
+    with patch("gdm.gui.main_window.MainWindow._start_scan") as mock:
+        def sync_start_scan(folder, on_finished):
+            on_finished([])
+        mock.side_effect = sync_start_scan
         yield mock
 
 
@@ -42,13 +44,19 @@ def mock_ui_components():
             pass
 
     class MockThumbnailView(QWidget):
-        """模拟 ThumbnailView，具有 selection_changed 信号和 load 方法。"""
+        """模拟 ThumbnailView，具有 selection_changed 信号和 load/show_progress/update_progress 方法。"""
         selection_changed = Signal(object)
 
         def __init__(self, parent=None):
             super().__init__(parent)
 
         def load(self, sprites):
+            pass
+
+        def show_progress(self):
+            pass
+
+        def update_progress(self, current, total):
             pass
 
     class MockDetailPanel(QWidget):
