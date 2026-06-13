@@ -39,13 +39,17 @@ class ScanWorker(QObject):
 
     def run(self):
         """在工作线程中执行扫描。"""
-        from gdm.core.scanner import scan_with_progress
-        sprites = scan_with_progress(
-            self._folder,
-            self._recursive,
-            progress_callback=lambda c, t: self.progress.emit(c, t),
-        )
-        self.finished.emit(sprites)
+        try:
+            from gdm.core.scanner import scan_with_progress
+            sprites = scan_with_progress(
+                self._folder,
+                self._recursive,
+                progress_callback=lambda c, t: self.progress.emit(c, t),
+            )
+            self.finished.emit(sprites)
+        except Exception as e:
+            logger.warning(f"后台扫描失败: {self._folder}, 错误: {e}")
+            self.finished.emit([])
 
 
 class MainWindow(QMainWindow):
@@ -59,6 +63,7 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self._project: Optional[Project] = None
         self._current_sprites: List[SpriteInfo] = []
+        self._scan_thread = None  # 后台扫描线程
         self._init_ui()
         self._try_restore_project()
 
@@ -138,27 +143,32 @@ class MainWindow(QMainWindow):
         self._set_workspace(folder)
 
     def _start_scan(self, folder: str, on_finished) -> None:
-        """启动后台扫描线程。
+        """启动后台扫描线程。"""
+        if self._scan_thread is not None:
+            self._scan_thread.requestInterruption()
+            # 不 wait() 阻塞，旧线程会在下次事件循环时退出
 
-        Args:
-            folder: 要扫描的文件夹路径
-            on_finished: 扫描完成回调，接收 List[SpriteInfo] 参数
-        """
-        # 取消之前的扫描（如果仍在运行）
-        if hasattr(self, '_scan_thread') and self._scan_thread is not None:
-            self._scan_thread.quit()
-            self._scan_thread.wait()
-
+        self._scan_on_finished = on_finished  # 存储回调供 _on_scan_completed 使用
         self._scan_thread = QThread()
         self._scan_worker = ScanWorker(folder)
         self._scan_worker.moveToThread(self._scan_thread)
         self._scan_thread.started.connect(self._scan_worker.run)
         self._scan_worker.progress.connect(self.thumbnail_view.update_progress)
-        self._scan_worker.finished.connect(lambda sprites: on_finished(sprites))
+        self._scan_worker.finished.connect(self._on_scan_completed)  # 直接连到主线程方法
         self._scan_worker.finished.connect(self._scan_thread.quit)
         self._scan_worker.finished.connect(self._scan_worker.deleteLater)
-        self._scan_thread.finished.connect(self._scan_thread.deleteLater)
+        self._scan_thread.finished.connect(self._on_thread_finished)
         self._scan_thread.start()
+
+    def _on_scan_completed(self, sprites) -> None:
+        """扫描完成 — 在主线程执行（由 Qt 信号自动队列）。"""
+        if hasattr(self, '_scan_on_finished') and self._scan_on_finished:
+            self._scan_on_finished(sprites)
+
+    def _on_thread_finished(self) -> None:
+        """线程结束清理。"""
+        self._scan_thread.deleteLater()
+        self._scan_thread = None
 
     def _set_workspace(self, folder: str) -> None:
         """设置工作区根目录，后台扫描并加载精灵图。"""
