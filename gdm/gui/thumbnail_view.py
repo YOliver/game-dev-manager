@@ -14,8 +14,10 @@ from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QT
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QLabel,
     QListWidget,
     QListWidgetItem,
+    QProgressBar,
     QStyledItemDelegate,
     QWidget,
     QVBoxLayout,
@@ -237,6 +239,48 @@ class ThumbnailView(QWidget):
 
         self._init_ui()
 
+        # 扫描进度界面（扫描时显示，完成后隐藏）
+        self._progress_widget = QWidget()
+        self._progress_widget.setVisible(False)
+        progress_layout = QVBoxLayout(self._progress_widget)
+        progress_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._progress_label = QLabel("正在扫描图片资源...")
+        self._progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._progress_label.setStyleSheet("font-size: 16px; color: #666;")
+
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setFixedWidth(400)
+        self._progress_bar.setTextVisible(True)
+        self._progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                text-align: center;
+                height: 24px;
+            }
+            QProgressBar::chunk {
+                background-color: #0078d4;
+                border-radius: 5px;
+            }
+        """)
+
+        self._progress_detail = QLabel("")
+        self._progress_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._progress_detail.setStyleSheet("font-size: 12px; color: #999;")
+
+        progress_layout.addStretch()
+        progress_layout.addWidget(self._progress_label)
+        progress_layout.addSpacing(16)
+        progress_layout.addWidget(self._progress_bar, 0, Qt.AlignmentFlag.AlignCenter)
+        progress_layout.addSpacing(8)
+        progress_layout.addWidget(self._progress_detail)
+        progress_layout.addStretch()
+
+        self._main_layout.addWidget(self._progress_widget)
+
         # 防抖定时器：窗口连续 resize 时延迟触发布局重排
         self._relayout_timer = QTimer(self)
         self._relayout_timer.setSingleShot(True)
@@ -245,8 +289,8 @@ class ThumbnailView(QWidget):
 
     def _init_ui(self) -> None:
         """初始化 UI 组件。"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self._main_layout = QVBoxLayout(self)
+        self._main_layout.setContentsMargins(0, 0, 0, 0)
 
         self._list_widget = QListWidget(self)
         self._list_widget.setViewMode(QListWidget.ViewMode.IconMode)
@@ -266,7 +310,7 @@ class ThumbnailView(QWidget):
 
         self._list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
-        layout.addWidget(self._list_widget)
+        self._main_layout.addWidget(self._list_widget)
 
     def _relayout(self) -> None:
         """根据当前视图宽度重新计算并应用网格布局。
@@ -296,12 +340,35 @@ class ThumbnailView(QWidget):
         super().resizeEvent(event)
         self._relayout_timer.start()
 
+    def show_progress(self) -> None:
+        """隐藏缩略图网格，显示扫描进度界面。"""
+        self._list_widget.setVisible(False)
+        self._progress_widget.setVisible(True)
+        self._progress_bar.setValue(0)
+        self._progress_detail.setText("")
+
+    def update_progress(self, current: int, total: int) -> None:
+        """更新扫描进度条和详情文字。
+
+        Args:
+            current: 已处理的图片数量
+            total: 图片总数
+        """
+        if total > 0:
+            pct = int(current / total * 100)
+            self._progress_bar.setValue(pct)
+            self._progress_detail.setText(f"已完成: {current} / {total} 张")
+
     def load(self, sprites: List[SpriteInfo]) -> None:
         """加载精灵图列表到网格视图。
 
         Args:
             sprites: 精灵图信息列表
         """
+        # 扫描完成，从进度界面切换回缩略图网格
+        self._progress_widget.setVisible(False)
+        self._list_widget.setVisible(True)
+
         self._sprites = list(sprites)
         self._items.clear()
         self._pending_workers.clear()
