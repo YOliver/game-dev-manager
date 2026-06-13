@@ -153,11 +153,15 @@ def _on_scan_finished(self, sprites: List[SpriteInfo]) -> None:
 
 ### 三处扫描入口统一改用后台扫描
 
-| 入口 | 当前调用 | 改为 |
-|------|----------|------|
-| `_set_workspace()` | 同步 `scan(folder, recursive=True)` | 启动 ScanWorker 后台扫描 |
-| `_try_restore_project()` | 同步 `scan(last_folder, recursive=True)` | 启动 ScanWorker 后台扫描 |
-| `_on_folder_selected()` | 同步 `scan(folder_path, recursive=True)` | 启动 ScanWorker 后台扫描 |
+各入口扫描完成后的行为不同，需使用不同的完成回调：
+
+| 入口 | 完成后行为 |
+|------|-----------|
+| `_set_workspace()` | `load(sprites)` + 保存配置 + 保存项目文件 |
+| `_try_restore_project()` | `load(sprites)`（不保存，启动恢复） |
+| `_on_folder_selected()` | `load(sprites)`（不保存） |
+
+可抽取公共的线程启动逻辑为 `_start_scan(folder, on_finished)` 方法，三个入口各自传入不同的 `on_finished` 回调。
 
 ## 验证标准
 
