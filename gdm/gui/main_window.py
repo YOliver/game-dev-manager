@@ -144,26 +144,38 @@ class MainWindow(QMainWindow):
 
     def _start_scan(self, folder: str, on_finished) -> None:
         """启动后台扫描线程。"""
-        # 保存旧线程引用并请求中断（不 wait() 阻塞）
+        # 断开旧工作器的信号，防止完成后触发错误回调或访问已销毁对象
+        old_worker = getattr(self, '_scan_worker', None)
+        if old_worker is not None:
+            try:
+                old_worker.finished.disconnect(self._on_scan_completed)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                old_worker.progress.disconnect(self.thumbnail_view.update_progress)
+            except (TypeError, RuntimeError):
+                pass
+
+        # 保存旧线程引用，让它在工作器完成后自行清理
         old_thread = self._scan_thread
         if old_thread is not None:
             old_thread.requestInterruption()
 
-        self._scan_on_finished = on_finished  # 存储回调供 _on_scan_completed 使用
+        self._scan_on_finished = on_finished
         self._scan_thread = QThread()
         self._scan_worker = ScanWorker(folder)
         self._scan_worker.moveToThread(self._scan_thread)
         self._scan_thread.started.connect(self._scan_worker.run)
         self._scan_worker.progress.connect(self.thumbnail_view.update_progress)
-        self._scan_worker.finished.connect(self._on_scan_completed)  # 直接连到主线程方法
+        self._scan_worker.finished.connect(self._on_scan_completed)
         self._scan_worker.finished.connect(self._scan_thread.quit)
         self._scan_worker.finished.connect(self._scan_worker.deleteLater)
         self._scan_thread.finished.connect(self._on_thread_finished)
         self._scan_thread.start()
 
-        # 旧线程延迟清理（确保信号断开后安全删除）
+        # 旧线程完成后自行清理（不 deleteLater，避免工作器仍在运行时线程被销毁）
         if old_thread is not None:
-            old_thread.deleteLater()
+            old_thread.finished.connect(old_thread.deleteLater)
 
     def _on_scan_completed(self, sprites) -> None:
         """扫描完成 — 在主线程执行（由 Qt 信号自动队列）。"""
