@@ -11,9 +11,10 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
+    QSplitter,
     QWidget,
 )
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Qt, Slot
 
 from gdm.core.config import load_config, save_config
 from gdm.core.models import Project, SpriteInfo
@@ -50,23 +51,30 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(4, 4, 4, 4)
-        main_layout.setSpacing(4)
+        # 使用 QSplitter 实现可拖动分隔条
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(4)
 
         # 左侧：项目面板
         self.project_panel = ProjectPanel()
         self.project_panel.folder_selected.connect(self._on_folder_selected)
-        main_layout.addWidget(self.project_panel, 1)
+        splitter.addWidget(self.project_panel)
 
         # 中间：缩略图视图
         self.thumbnail_view = ThumbnailView()
         self.thumbnail_view.selection_changed.connect(self._on_selection_changed)
-        main_layout.addWidget(self.thumbnail_view, 3)
+        splitter.addWidget(self.thumbnail_view)
 
         # 右侧：详情面板
         self.detail_panel = DetailPanel()
-        main_layout.addWidget(self.detail_panel, 1)
+        splitter.addWidget(self.detail_panel)
+
+        # 设置初始大小比例 左侧:中间:右侧 = 200:600:200
+        splitter.setSizes([200, 600, 200])
+
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(4, 4, 4, 4)
+        main_layout.addWidget(splitter)
 
         # 菜单栏
         self._init_menubar()
