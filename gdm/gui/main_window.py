@@ -144,9 +144,10 @@ class MainWindow(QMainWindow):
 
     def _start_scan(self, folder: str, on_finished) -> None:
         """启动后台扫描线程。"""
-        if self._scan_thread is not None:
-            self._scan_thread.requestInterruption()
-            # 不 wait() 阻塞，旧线程会在下次事件循环时退出
+        # 保存旧线程引用并请求中断（不 wait() 阻塞）
+        old_thread = self._scan_thread
+        if old_thread is not None:
+            old_thread.requestInterruption()
 
         self._scan_on_finished = on_finished  # 存储回调供 _on_scan_completed 使用
         self._scan_thread = QThread()
@@ -160,6 +161,10 @@ class MainWindow(QMainWindow):
         self._scan_thread.finished.connect(self._on_thread_finished)
         self._scan_thread.start()
 
+        # 旧线程延迟清理（确保信号断开后安全删除）
+        if old_thread is not None:
+            old_thread.deleteLater()
+
     def _on_scan_completed(self, sprites) -> None:
         """扫描完成 — 在主线程执行（由 Qt 信号自动队列）。"""
         if hasattr(self, '_scan_on_finished') and self._scan_on_finished:
@@ -167,8 +172,11 @@ class MainWindow(QMainWindow):
 
     def _on_thread_finished(self) -> None:
         """线程结束清理。"""
-        self._scan_thread.deleteLater()
-        self._scan_thread = None
+        thread = self.sender()
+        # 只清理当前 active 的线程，忽略旧线程的残留信号
+        if thread is self._scan_thread:
+            thread.deleteLater()
+            self._scan_thread = None
 
     def _set_workspace(self, folder: str) -> None:
         """设置工作区根目录，后台扫描并加载精灵图。"""
