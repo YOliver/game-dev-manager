@@ -18,8 +18,7 @@
 
 | 操作 | 内容 |
 |------|------|
-| 移除 | `QHBoxLayout` |
-| 新增 | `QSplitter` |
+| 新增 | `QSplitter`（来自 `PySide6.QtWidgets`） |
 | 新增 | `Qt`（来自 `PySide6.QtCore`） |
 
 ### _init_ui() 变更
