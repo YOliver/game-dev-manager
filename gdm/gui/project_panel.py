@@ -14,8 +14,25 @@ class ProjectPanel(QWidget):
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)  # 面板边距归零
+
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabel("文件夹")
+        self.tree.setHeaderHidden(True)          # 隐藏"文件夹"列标题
+        self.tree.setIndentation(10)             # 缩进从默认20→10
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                font-size: 11px;
+            }
+            QTreeWidget::item {
+                padding: 1px 0px;
+                margin: 0px;
+                border: none;
+            }
+            QTreeWidget::branch {
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
         self.tree.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.tree)
 
