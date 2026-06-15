@@ -164,19 +164,113 @@ class HelpDialog(QDialog):
             self.text_browser.setPlainText(md_text)
 
     def _on_search_text_changed(self, text: str) -> None:
-        """搜索文本变化时的处理（待实现）。"""
-        # TODO: 实现搜索高亮逻辑
-        pass
+        """搜索框文字变化回调，触发搜索和高亮。"""
+        self._search(text)
+
+    def _search(self, text: str) -> None:
+        """搜索并高亮所有匹配项。"""
+        # 清除旧高亮（重新加载 HTML）
+        if self._current_html:
+            self.text_browser.setHtml(self._current_html)
+
+        self._highlights = []
+        self._current_match = 0
+        self._total_matches = 0
+
+        if not text:
+            self._update_nav_buttons()
+            return
+
+        # 查找所有匹配项
+        document = self.text_browser.document()
+        cursor = QTextCursor(document)
+        format = QTextCharFormat()
+        format.setBackground(QBrush(QColor("#FFFF00")))  # 黄色高亮
+
+        # 从文档开始查找
+        while True:
+            cursor = document.find(text, cursor)
+            if cursor.isNull():
+                break
+            # 保存高亮的 cursor（需要复制，否则会被覆盖）
+            self._highlights.append(QTextCursor(cursor))
+
+        self._total_matches = len(self._highlights)
+        self._update_nav_buttons()
+
+        # 跳转到第一个匹配项
+        if self._highlights:
+            self._jump_to_match(0)
+
+    def _update_nav_buttons(self) -> None:
+        """更新导航按钮状态和计数器。"""
+        has_matches = self._total_matches > 0
+        self.prev_btn.setEnabled(has_matches)
+        self.next_btn.setEnabled(has_matches)
+        self.counter_label.setVisible(has_matches)
+
+        if has_matches:
+            self.counter_label.setText(f"第 {self._current_match + 1}/{self._total_matches} 项")
+        else:
+            if self.search_box.text():
+                self.counter_label.setText("无结果")
+                self.counter_label.setVisible(True)
+
+    def _jump_to_match(self, index: int) -> None:
+        """跳转到指定匹配项。"""
+        if not (0 <= index < len(self._highlights)):
+            return
+
+        self._current_match = index
+        cursor = self._highlights[index]
+
+        # 清除之前的高亮，重新高亮所有项
+        if self._current_html:
+            self.text_browser.setHtml(self._current_html)
+
+        # 重新应用高亮（当前项用不同颜色）
+        document = self.text_browser.document()
+        all_text = self.search_box.text()
+
+        cursor_all = QTextCursor(document)
+        format_normal = QTextCharFormat()
+        format_normal.setBackground(QBrush(QColor("#FFFF00")))  # 黄色
+
+        format_current = QTextCharFormat()
+        format_current.setBackground(QBrush(QColor("#FFA500")))  # 橙色（当前项）
+
+        matches = []
+        while True:
+            cursor_all = document.find(all_text, cursor_all)
+            if cursor_all.isNull():
+                break
+            matches.append(QTextCursor(cursor_all))
+
+        for i, match_cursor in enumerate(matches):
+            if i == index:
+                match_cursor.mergeCharFormat(format_current)
+            else:
+                match_cursor.mergeCharFormat(format_normal)
+
+        # 滚动到当前项
+        self.text_browser.setTextCursor(matches[index])
+        self.text_browser.ensureCursorVisible()
+
+        self._update_nav_buttons()
 
     def _on_prev_clicked(self) -> None:
-        """上一个匹配按钮点击时的处理（待实现）。"""
-        # TODO: 实现上一个匹配导航
-        pass
+        """上一个按钮点击回调。"""
+        if self._total_matches == 0:
+            return
+        new_index = (self._current_match - 1) % self._total_matches
+        self._jump_to_match(new_index)
 
     def _on_next_clicked(self) -> None:
-        """下一个匹配按钮点击时的处理（待实现）。"""
-        # TODO: 实现下一个匹配导航
-        pass
+        """下一个按钮点击回调。"""
+        if self._total_matches == 0:
+            return
+        new_index = (self._current_match + 1) % self._total_matches
+        self._jump_to_match(new_index)
 
 
 def get_help_doc_path(filename: str) -> str:
