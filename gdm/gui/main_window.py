@@ -70,8 +70,10 @@ class MainWindow(QMainWindow):
         self.detail_panel = DetailPanel()
         splitter.addWidget(self.detail_panel)
 
-        # 设置初始大小比例 左侧:中间:右侧 = 200:600:200
-        splitter.setSizes([200, 600, 200])
+        # 设置拉伸因子，实现 1:5:5 比例
+        splitter.setStretchFactor(0, 1)  # 左侧面板
+        splitter.setStretchFactor(1, 5)  # 中间面板
+        splitter.setStretchFactor(2, 5)  # 右侧面板
 
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(4, 4, 4, 4)
