@@ -79,9 +79,15 @@ def _update_toolbar(self, menu):
 ### 改动范围
 
 仅修改 `gdm/gui/main_window.py`：
+- 文件顶部新增 `from PySide6.QtWidgets import QToolBar`
 - `_init_ui()` — 添加 `QToolBar`
 - `_init_menubar()` — 连接 `aboutToShow` 信号，设置默认内容
 - 新增 `_update_toolbar()` 方法
+
+### 注意事项
+
+- 点击菜单时，下拉菜单会短暂遮挡功能栏。用户关闭下拉菜单后，功能栏保留显示该菜单功能项，这是预期行为。
+- 功能栏按钮使用 `addAction(action)` 创建，自动继承对应菜单项的文本和 `triggered` 信号，无需手动绑定回调。
 
 ### 不改动的内容
 
