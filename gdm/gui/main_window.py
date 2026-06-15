@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
+    QMenu,
     QSplitter,
     QToolBar,
     QWidget,
@@ -349,7 +350,7 @@ class MainWindow(QMainWindow):
         self._save_root_paths()
         super().closeEvent(event)
 
-    def _update_toolbar(self, menu) -> None:
+    def _update_toolbar(self, menu: QMenu) -> None:
         """根据菜单更新功能栏内容。"""
         self.toolbar.clear()
         for action in menu.actions():
