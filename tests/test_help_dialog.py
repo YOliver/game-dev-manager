@@ -7,7 +7,7 @@ import pytest
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from gdm.gui.help_dialog import get_help_doc_path
+from gdm.gui.help_dialog import get_help_doc_path, md_to_html
 
 
 class TestGetHelpDocPath:
@@ -33,3 +33,28 @@ class TestGetHelpDocPath:
         expected = os.path.join('/fake/meipass', 'helpdocs', 'about.md')
         expected = os.path.normpath(expected)
         assert os.path.normpath(path) == expected
+
+
+class TestMdToHtml:
+    """Tests for md_to_html function."""
+
+    def test_basic_markdown(self):
+        """Test basic Markdown to HTML conversion."""
+        md_text = "# Title\n\nThis is a paragraph."
+        html = md_to_html(md_text)
+        assert "<h1>Title</h1>" in html
+        assert "<p>This is a paragraph.</p>" in html
+
+    def test_code_block(self):
+        """Test fenced code block conversion."""
+        md_text = "```python\nprint('hello')\n```"
+        html = md_to_html(md_text)
+        assert "<pre" in html
+        assert "print('hello')" in html
+
+    def test_table(self):
+        """Test table conversion."""
+        md_text = "| Col1 | Col2 |\n|------|------|\n| A    | B    |"
+        html = md_to_html(md_text)
+        assert "<table>" in html
+        assert "<th>Col1</th>" in html
