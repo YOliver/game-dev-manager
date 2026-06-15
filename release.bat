@@ -3,7 +3,7 @@ cd /d "%~dp0"
 
 echo === Building EXE ===
 pip show pyinstaller >nul 2>&1 || pip install pyinstaller
-pyinstaller --onefile --windowed --name GameDevManager gdm/main.py
+pyinstaller GameDevManager.spec
 
 echo.
 echo === Building Installer ===
