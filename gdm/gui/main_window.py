@@ -8,6 +8,7 @@ import os
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -328,7 +329,7 @@ class MainWindow(QMainWindow):
         """处理根目录移除请求，更新配置。"""
         self._save_root_paths()
 
-    def closeEvent(self, event) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         """关闭窗口前保存根目录列表到配置。"""
         self._save_root_paths()
         super().closeEvent(event)
