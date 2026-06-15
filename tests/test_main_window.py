@@ -156,7 +156,7 @@ class TestSaveRootPaths:
     """测试 _save_root_paths() 的保存行为。"""
 
     def test_save_root_paths_to_config(
-        self, main_window, tmp_path, monkeypatch
+        self, main_window, tmp_path
     ):
         """_save_root_paths() 应将所有根目录保存到 root_paths 配置。"""
         from gdm.core.config import load_config
