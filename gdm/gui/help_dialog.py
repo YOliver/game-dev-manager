@@ -11,7 +11,7 @@ import markdown
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                                QTextBrowser, QLineEdit, QPushButton,
                                QLabel, QMessageBox, QWidget)
-from PySide6.QtGui import QTextCursor, QTextCharFormat, QBrush, QColor
+from PySide6.QtGui import QTextCursor, QTextCharFormat, QBrush, QColor, QTextDocument
 
 
 def md_to_html(md_text: str) -> str:
@@ -91,7 +91,6 @@ class HelpDialog(QDialog):
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
         self._current_html = ""
-        self._highlights: list = []
         self._current_match = 0
         self._total_matches = 0
         self._init_ui()
@@ -173,7 +172,6 @@ class HelpDialog(QDialog):
         if self._current_html:
             self.text_browser.setHtml(self._current_html)
 
-        self._highlights = []
         self._current_match = 0
         self._total_matches = 0
 
@@ -181,25 +179,21 @@ class HelpDialog(QDialog):
             self._update_nav_buttons()
             return
 
-        # 查找所有匹配项
+        # 查找所有匹配项（用于计数）
         document = self.text_browser.document()
         cursor = QTextCursor(document)
-        format = QTextCharFormat()
-        format.setBackground(QBrush(QColor("#FFFF00")))  # 黄色高亮
 
-        # 从文档开始查找
+        # 从文档开始查找（大小写不敏感）
         while True:
-            cursor = document.find(text, cursor)
+            cursor = document.find(text, cursor, QTextDocument.FindFlag.FindCaseInsensitively)
             if cursor.isNull():
                 break
-            # 保存高亮的 cursor（需要复制，否则会被覆盖）
-            self._highlights.append(QTextCursor(cursor))
+            self._total_matches += 1
 
-        self._total_matches = len(self._highlights)
         self._update_nav_buttons()
 
         # 跳转到第一个匹配项
-        if self._highlights:
+        if self._total_matches > 0:
             self._jump_to_match(0)
 
     def _update_nav_buttons(self) -> None:
@@ -218,11 +212,10 @@ class HelpDialog(QDialog):
 
     def _jump_to_match(self, index: int) -> None:
         """跳转到指定匹配项。"""
-        if not (0 <= index < len(self._highlights)):
+        if not (0 <= index < self._total_matches):
             return
 
         self._current_match = index
-        cursor = self._highlights[index]
 
         # 清除之前的高亮，重新高亮所有项
         if self._current_html:
@@ -241,7 +234,7 @@ class HelpDialog(QDialog):
 
         matches = []
         while True:
-            cursor_all = document.find(all_text, cursor_all)
+            cursor_all = document.find(all_text, cursor_all, QTextDocument.FindFlag.FindCaseInsensitively)
             if cursor_all.isNull():
                 break
             matches.append(QTextCursor(cursor_all))
