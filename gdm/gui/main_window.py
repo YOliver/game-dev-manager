@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
     QSplitter,
+    QToolBar,
     QWidget,
 )
 
@@ -82,6 +83,11 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(4, 4, 4, 4)
         main_layout.addWidget(splitter)
 
+        # 功能栏
+        self.toolbar = QToolBar("功能栏")
+        self.toolbar.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
+
         # 菜单栏
         self._init_menubar()
 
@@ -103,11 +109,15 @@ class MainWindow(QMainWindow):
         exit_action = file_menu.addAction("退出")
         exit_action.triggered.connect(self.close)
 
+        file_menu.aboutToShow.connect(lambda: self._update_toolbar(file_menu))
+
         # 工具菜单
         tool_menu = menubar.addMenu("工具")
 
         rename_action = tool_menu.addAction("批量重命名")
         rename_action.triggered.connect(self._open_rename_dialog)
+
+        tool_menu.aboutToShow.connect(lambda: self._update_toolbar(tool_menu))
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助")
@@ -120,6 +130,11 @@ class MainWindow(QMainWindow):
 
         about_action = help_menu.addAction("软件信息")
         about_action.triggered.connect(lambda: self._open_help_doc("about.md"))
+
+        help_menu.aboutToShow.connect(lambda: self._update_toolbar(help_menu))
+
+        # 默认显示"文件"菜单的功能项
+        self._update_toolbar(file_menu)
 
     # ------------------------------------------------------------------ #
     #  工作区管理
@@ -333,3 +348,11 @@ class MainWindow(QMainWindow):
         """关闭窗口前保存根目录列表到配置。"""
         self._save_root_paths()
         super().closeEvent(event)
+
+    def _update_toolbar(self, menu) -> None:
+        """根据菜单更新功能栏内容。"""
+        self.toolbar.clear()
+        for action in menu.actions():
+            if action.isSeparator():
+                continue
+            self.toolbar.addAction(action)
