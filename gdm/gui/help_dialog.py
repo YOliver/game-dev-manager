@@ -185,7 +185,7 @@ class HelpDialog(QDialog):
 
         # 从文档开始查找（大小写不敏感）
         while True:
-            cursor = document.find(text, cursor, QTextDocument.FindFlag.FindCaseInsensitively)
+            cursor = document.find(text, cursor)
             if cursor.isNull():
                 break
             self._total_matches += 1
@@ -234,7 +234,8 @@ class HelpDialog(QDialog):
 
         matches = []
         while True:
-            cursor_all = document.find(all_text, cursor_all, QTextDocument.FindFlag.FindCaseInsensitively)
+            # PySide6/Qt6 中不使用 FindCaseSensitively 标志即为大小写不敏感搜索
+            cursor_all = document.find(all_text, cursor_all)
             if cursor_all.isNull():
                 break
             matches.append(QTextCursor(cursor_all))
