@@ -114,10 +114,10 @@ class MainWindow(QMainWindow):
         manual_action = help_menu.addAction("使用手册")
         manual_action.triggered.connect(lambda: self._open_help_doc("使用手册.md"))
 
-        welcome_action = help_menu.addAction("欢迎指南")
+        welcome_action = help_menu.addAction("欢迎")
         welcome_action.triggered.connect(lambda: self._open_help_doc("welcome.md"))
 
-        about_action = help_menu.addAction("关于")
+        about_action = help_menu.addAction("软件信息")
         about_action.triggered.connect(lambda: self._open_help_doc("about.md"))
 
     # ------------------------------------------------------------------ #
@@ -311,8 +311,8 @@ class MainWindow(QMainWindow):
         # 根据文件名设置窗口标题
         title_map = {
             "使用手册.md": "使用手册",
-            "welcome.md": "欢迎指南",
-            "about.md": "关于",
+            "welcome.md": "欢迎",
+            "about.md": "软件信息",
         }
         dialog.setWindowTitle(title_map.get(filename, "帮助"))
         dialog.load_doc(filename)
