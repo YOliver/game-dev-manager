@@ -150,3 +150,35 @@ class TestTryRestoreProjectLoadsConfig:
             assert window._project.root_path == test_folder
         finally:
             window.close()
+
+
+class TestSaveRootPaths:
+    """测试 _save_root_paths() 的保存行为。"""
+
+    def test_save_root_paths_to_config(
+        self, main_window, tmp_path, monkeypatch
+    ):
+        """_save_root_paths() 应将所有根目录保存到 root_paths 配置。"""
+        from gdm.core.config import load_config
+
+        # 设置三个模拟的根目录条目
+        dirs = [str(tmp_path / "root_a"), str(tmp_path / "root_b"), str(tmp_path / "root_c")]
+        for d in dirs:
+            os.makedirs(d, exist_ok=True)
+
+        mock_items = []
+        for d in dirs:
+            item = MagicMock()
+            item.data.return_value = d
+            mock_items.append(item)
+
+        main_window.project_panel.tree.topLevelItemCount.return_value = len(dirs)
+        main_window.project_panel.tree.topLevelItem.side_effect = lambda i: mock_items[i]
+
+        # 调用 _save_root_paths
+        main_window._save_root_paths()
+
+        # 验证
+        config = load_config()
+        assert config is not None
+        assert config.get("root_paths") == dirs
