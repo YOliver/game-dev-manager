@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
     def _open_extract_all(self) -> None:
         """打开全量解压功能。"""
         from gdm.core.extractor import find_archives, extract_all
-        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox, QProgressDialog
 
         directory = self._selected_folder or (self._project.root_path if self._project else None)
         if directory is None:
@@ -389,7 +389,18 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
 
-        success, fail, failed_list = extract_all(directory)
+        progress = QProgressDialog("正在解压...", None, 0, 0, self)
+        progress.setWindowTitle("全量解压")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+
+        def update_progress(current: int, total: int, filename: str):
+            progress.setMaximum(total)
+            progress.setValue(current)
+            progress.setLabelText(f"正在解压：{filename}\n已完成：{current}/{total}")
+
+        success, fail, failed_list = extract_all(directory, progress_callback=update_progress)
+        progress.close()
 
         msg = f"解压完成：成功 {success} 个，失败 {fail} 个"
         if failed_list:
@@ -399,7 +410,6 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(self, "全量解压", msg)
 
-        # 刷新视图
         self._on_folder_selected(directory)
 
     def _update_toolbar(self, menu_name: str) -> None:
