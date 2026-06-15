@@ -242,7 +242,7 @@ class MainWindow(QMainWindow):
         self.thumbnail_view.show_progress()
 
         # 启动后台扫描
-        self._start_scan(last_folder, on_finished=self._on_restore_scan_finished)
+        self._start_scan(root_paths[0], on_finished=self._on_restore_scan_finished)
 
     def _on_restore_scan_finished(self, sprites) -> None:
         """_try_restore_project 扫描完成回调（不保存配置）。"""

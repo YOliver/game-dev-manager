@@ -210,3 +210,38 @@ class TestCloseEventSavesRootPaths:
 
             # 验证 closeEvent 触发了 _save_root_paths
             mock_save.assert_called_once()
+
+
+class TestTryRestoreProjectMultipleRoots:
+    """测试 _try_restore_project() 应从 root_paths 恢复多个根目录。"""
+
+    def test_restore_multiple_roots(
+        self, tmp_path, monkeypatch, mock_scan, mock_ui_components, qapp
+    ):
+        """_try_restore_project() 应从配置的 root_paths 恢复所有有效目录。"""
+        from gdm.core.config import save_config
+        from unittest.mock import patch
+
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+
+        # 创建多个有效目录
+        root_a = str(tmp_path / "root_a")
+        root_b = str(tmp_path / "root_b")
+        root_c = str(tmp_path / "root_c")  # 不创建此目录，模拟已删除
+        os.makedirs(root_a, exist_ok=True)
+        os.makedirs(root_b, exist_ok=True)
+
+        save_config({"root_paths": [root_a, root_b, root_c]})
+
+        # mock_ui_components 已将 gdm.gui.main_window.ProjectPanel 替换为 MockProjectPanel
+        from gdm.gui.main_window import ProjectPanel as MockPanel
+
+        with patch.object(MockPanel, "add_root") as mock_add_root:
+            from gdm.gui.main_window import MainWindow
+
+            window = MainWindow()
+            try:
+                # 验证只恢复了存在的目录（root_c 被静默跳过）
+                assert mock_add_root.call_count == 2
+            finally:
+                window.close()
