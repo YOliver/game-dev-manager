@@ -74,11 +74,13 @@ def _open_archive(archive_path: str):
 
 ### main_window.py — 菜单注册和调用入口
 
+**追踪选中目录：** 在 `_on_folder_selected()` 中新增 `self._selected_folder = folder_path`，追踪用户当前点击的树节点。
+
 ```python
 def _open_extract_all(self) -> None:
     """打开全量解压功能。
     
-    1. 获取当前选中目录：self._project.root_path
+    1. 获取当前选中目录：self._selected_folder or self._project.root_path
     2. 扫描压缩包：find_archives(directory)
     3. 弹出 QMessageBox 确认（数量 + 总大小）
     4. 用户确认后执行 extract_all(directory)
@@ -87,7 +89,18 @@ def _open_extract_all(self) -> None:
     """
 ```
 
-当前选中目录通过 `self._project.root_path` 获取，即用户最后在项目面板点击的目录路径。
+目录获取优先级：先取用户在树中点击的目录（`_selected_folder`），未点击时回退到工作区根目录（`_project.root_path`）。
+
+**初始化：** 在 `__init__()` 中添加 `self._selected_folder: Optional[str] = None`。
+
+**_on_folder_selected 修改：**
+
+```python
+def _on_folder_selected(self, folder_path: str) -> None:
+    self._selected_folder = folder_path  # 追踪当前选中
+    self.thumbnail_view.show_progress()
+    self._start_scan(folder_path, on_finished=self._on_tree_scan_finished)
+```
 
 **菜单注册（`_init_menubar()`）：**
 
@@ -124,7 +137,17 @@ QMessageBox.information(title="全量解压",
 | 文件 | 改动 |
 |------|------|
 | `gdm/core/extractor.py` | 新建 |
-| `gdm/gui/main_window.py` | 添加菜单项、`_open_extract_all` 方法 |
+| `gdm/gui/main_window.py` | 添加菜单项、`_open_extract_all` 方法、`_selected_folder` 成员变量 |
+
+### 边缘情况处理
+
+| 场景 | 行为 |
+|------|------|
+| 未选中任何目录 | 提示"请先在项目面板中选择一个目录" |
+| 未发现压缩包 | 提示"未发现压缩包" |
+| 空压缩包 | 正常解压（产生空目录），计为成功 |
+| 单文件压缩包（.gz） | 以文件名（去扩展名）创建目录，放入解压文件 |
+| 确认对话框点取消 | 不执行任何操作 |
 
 ### 不改动的内容
 
