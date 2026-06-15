@@ -300,7 +300,7 @@ class TestToolbarUpdate:
         tool_menu.aboutToShow.emit()
 
         # 验证工具栏已更新为工具菜单的子项
-        expected_texts = ["批量重命名"]
+        expected_texts = ["批量重命名", "全量解压"]
         actual_texts = [action.text() for action in main_window.toolbar.actions()]
         assert actual_texts == expected_texts
 
