@@ -21,6 +21,7 @@ from gdm.core.config import load_config, save_config
 from gdm.core.models import Project, SpriteInfo
 from gdm.core.project import load as load_project, save as save_project
 from gdm.gui.detail_panel import DetailPanel
+from gdm.gui.help_dialog import HelpDialog
 from gdm.gui.project_panel import ProjectPanel
 from gdm.gui.rename_dialog import RenameDialog
 from gdm.gui.thumbnail_view import ThumbnailView
@@ -106,6 +107,18 @@ class MainWindow(QMainWindow):
 
         rename_action = tool_menu.addAction("批量重命名")
         rename_action.triggered.connect(self._open_rename_dialog)
+
+        # 帮助菜单
+        help_menu = menubar.addMenu("帮助")
+
+        manual_action = help_menu.addAction("使用手册")
+        manual_action.triggered.connect(lambda: self._open_help_doc("使用手册.md"))
+
+        welcome_action = help_menu.addAction("欢迎指南")
+        welcome_action.triggered.connect(lambda: self._open_help_doc("welcome.md"))
+
+        about_action = help_menu.addAction("关于")
+        about_action.triggered.connect(lambda: self._open_help_doc("about.md"))
 
     # ------------------------------------------------------------------ #
     #  工作区管理
@@ -282,6 +295,28 @@ class MainWindow(QMainWindow):
         if self._current_sprites:
             current_folder = os.path.dirname(self._current_sprites[0].file_path)
             self._on_folder_selected(current_folder)
+
+    # ------------------------------------------------------------------ #
+    #  帮助菜单
+    # ------------------------------------------------------------------ #
+
+    @Slot()
+    def _open_help_doc(self, filename: str) -> None:
+        """打开帮助文档对话框。
+
+        Args:
+            filename: 帮助文档文件名
+        """
+        dialog = HelpDialog(self)
+        # 根据文件名设置窗口标题
+        title_map = {
+            "使用手册.md": "使用手册",
+            "welcome.md": "欢迎指南",
+            "about.md": "关于",
+        }
+        dialog.setWindowTitle(title_map.get(filename, "帮助"))
+        dialog.load_doc(filename)
+        dialog.exec()
 
     def _save_root_paths(self) -> None:
         """保存当前所有根目录到配置。"""
