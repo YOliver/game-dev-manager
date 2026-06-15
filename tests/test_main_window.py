@@ -220,7 +220,6 @@ class TestTryRestoreProjectMultipleRoots:
     ):
         """_try_restore_project() 应从配置的 root_paths 恢复所有有效目录。"""
         from gdm.core.config import save_config
-        from unittest.mock import patch
 
         monkeypatch.setenv("APPDATA", str(tmp_path))
 
@@ -241,6 +240,9 @@ class TestTryRestoreProjectMultipleRoots:
 
             window = MainWindow()
             try:
+                # 验证 _project 正确设置为第一个根目录
+                assert window._project is not None
+                assert window._project.root_path == root_a
                 # 验证只恢复了存在的目录（root_c 被静默跳过）
                 assert mock_add_root.call_count == 2
             finally:
