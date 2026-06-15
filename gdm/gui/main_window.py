@@ -177,6 +177,7 @@ class MainWindow(QMainWindow):
         """设置工作区根目录，后台扫描并加载精灵图。"""
         self._project = Project(root_path=folder)
         self.project_panel.add_root(folder)
+        self._save_root_paths()
 
         # 显示进度界面
         self.thumbnail_view.show_progress()
@@ -192,7 +193,9 @@ class MainWindow(QMainWindow):
         # 保存 last_folder 到全局配置
         folder = self._project.root_path
         try:
-            save_config({"last_folder": folder})
+            config = load_config() or {}
+            config["last_folder"] = folder
+            save_config(config)
         except Exception as e:
             logger.warning(f"保存配置失败: {e}")
 
@@ -237,17 +240,6 @@ class MainWindow(QMainWindow):
         # 扫描第一个根目录
         if os.path.isdir(root_paths[0]):
             self._on_folder_selected(root_paths[0])
-
-        # 显示进度界面
-        self.thumbnail_view.show_progress()
-
-        # 启动后台扫描
-        self._start_scan(root_paths[0], on_finished=self._on_restore_scan_finished)
-
-    def _on_restore_scan_finished(self, sprites) -> None:
-        """_try_restore_project 扫描完成回调（不保存配置）。"""
-        self._current_sprites = sprites
-        self.thumbnail_view.load(sprites)
 
     # ------------------------------------------------------------------ #
     #  信号回调
@@ -335,3 +327,8 @@ class MainWindow(QMainWindow):
     def _on_root_removed(self, path: str) -> None:
         """处理根目录移除请求，更新配置。"""
         self._save_root_paths()
+
+    def closeEvent(self, event) -> None:
+        """关闭窗口前保存根目录列表到配置。"""
+        self._save_root_paths()
+        super().closeEvent(event)
