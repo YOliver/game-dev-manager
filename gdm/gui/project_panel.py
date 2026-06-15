@@ -78,7 +78,6 @@ class ProjectPanel(QWidget):
         if path in self._img_dirs:
             root_item.setForeground(0, self._GREEN)
         self._populate_tree(root_item, path)
-        self.tree.expandItem(root_item)
 
     def remove_root(self, path: str) -> None:
         """从树中移除指定根目录。"""
