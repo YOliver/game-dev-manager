@@ -189,3 +189,21 @@ class TestExtractAll:
         success, fail, _ = extract_all(str(tmp_path))
         assert success == 0
         assert fail == 0
+
+    def test_extract_all_with_progress_callback(self, tmp_path):
+        """progress_callback 应在每个压缩包处理后被调用。"""
+        d = Path(tmp_path)
+        with zipfile.ZipFile(d / "a.zip", "w") as zf:
+            zf.writestr("a.txt", "a")
+        with zipfile.ZipFile(d / "b.zip", "w") as zf:
+            zf.writestr("b.txt", "b")
+
+        calls = []
+        def cb(current, total, filename):
+            calls.append((current, total, filename))
+
+        success, fail, _ = extract_all(str(d), progress_callback=cb)
+
+        assert success == 2
+        assert len(calls) >= 2
+        assert calls[-1][1] >= 2

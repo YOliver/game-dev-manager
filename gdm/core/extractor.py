@@ -11,7 +11,7 @@ import os
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import List, Tuple
+from typing import Callable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,10 @@ def extract_archive(archive_path: str) -> str:
         raise
 
 
-def extract_all(directory: str) -> Tuple[int, int, List[str]]:
+def extract_all(
+    directory: str,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> Tuple[int, int, List[str]]:
     """递归解压目录下所有压缩包（含嵌套）。
 
     返回 (成功数, 失败数, 失败文件路径列表)。
@@ -147,6 +150,7 @@ def extract_all(directory: str) -> Tuple[int, int, List[str]]:
         if not archives:
             break
 
+        total_count = len(archives)
         any_success = False
         for archive_path in archives:
             try:
@@ -157,6 +161,10 @@ def extract_all(directory: str) -> Tuple[int, int, List[str]]:
                 logger.warning(f"解压失败: {archive_path}, 错误: {e}")
                 fail_count += 1
                 failed_paths.append(archive_path)
+
+            if progress_callback is not None:
+                processed = success_count + fail_count
+                progress_callback(processed, total_count, os.path.basename(archive_path))
 
         if not any_success:
             break  # all failed, avoid infinite loop
