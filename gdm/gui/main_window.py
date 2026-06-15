@@ -8,7 +8,7 @@ import os
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -93,49 +93,54 @@ class MainWindow(QMainWindow):
         self._init_menubar()
 
     def _init_menubar(self) -> None:
-        """初始化菜单栏。"""
+        """初始化菜单栏和功能栏 Action。"""
         menubar = self.menuBar()
 
-        # 文件菜单
+        # 文件菜单 — Action 独立创建，不加入菜单
         file_menu = menubar.addMenu("文件")
 
-        open_action = file_menu.addAction("打开文件夹")
+        open_action = QAction("打开文件夹", self)
         open_action.triggered.connect(self._open_folder)
 
-        save_action = file_menu.addAction("保存工作区")
+        save_action = QAction("保存工作区", self)
         save_action.triggered.connect(self._save_project)
 
-        file_menu.addSeparator()
-
-        exit_action = file_menu.addAction("退出")
+        exit_action = QAction("退出", self)
         exit_action.triggered.connect(self.close)
 
-        file_menu.aboutToShow.connect(lambda: self._update_toolbar(file_menu))
+        file_menu.aboutToShow.connect(lambda: self._update_toolbar("文件"))
 
         # 工具菜单
         tool_menu = menubar.addMenu("工具")
 
-        rename_action = tool_menu.addAction("批量重命名")
+        rename_action = QAction("批量重命名", self)
         rename_action.triggered.connect(self._open_rename_dialog)
 
-        tool_menu.aboutToShow.connect(lambda: self._update_toolbar(tool_menu))
+        tool_menu.aboutToShow.connect(lambda: self._update_toolbar("工具"))
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助")
 
-        manual_action = help_menu.addAction("使用手册")
+        manual_action = QAction("使用手册", self)
         manual_action.triggered.connect(lambda: self._open_help_doc("使用手册.md"))
 
-        welcome_action = help_menu.addAction("欢迎")
+        welcome_action = QAction("欢迎", self)
         welcome_action.triggered.connect(lambda: self._open_help_doc("welcome.md"))
 
-        about_action = help_menu.addAction("软件信息")
+        about_action = QAction("软件信息", self)
         about_action.triggered.connect(lambda: self._open_help_doc("about.md"))
 
-        help_menu.aboutToShow.connect(lambda: self._update_toolbar(help_menu))
+        help_menu.aboutToShow.connect(lambda: self._update_toolbar("帮助"))
+
+        # 存入字典，供功能栏使用
+        self._toolbar_actions = {
+            "文件": [open_action, save_action, exit_action],
+            "工具": [rename_action],
+            "帮助": [manual_action, welcome_action, about_action],
+        }
 
         # 默认显示"文件"菜单的功能项
-        self._update_toolbar(file_menu)
+        self._update_toolbar("文件")
 
     # ------------------------------------------------------------------ #
     #  工作区管理
@@ -350,10 +355,8 @@ class MainWindow(QMainWindow):
         self._save_root_paths()
         super().closeEvent(event)
 
-    def _update_toolbar(self, menu: QMenu) -> None:
-        """根据菜单更新功能栏内容。"""
+    def _update_toolbar(self, menu_name: str) -> None:
+        """根据菜单名称更新功能栏内容。"""
         self.toolbar.clear()
-        for action in menu.actions():
-            if action.isSeparator():
-                continue
+        for action in self._toolbar_actions.get(menu_name, []):
             self.toolbar.addAction(action)
