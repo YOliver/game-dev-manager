@@ -44,6 +44,7 @@ class MainWindow(QMainWindow):
         self._project: Optional[Project] = None
         self._current_sprites: List[SpriteInfo] = []
         self._scan_pending: Optional[tuple[str, object]] = None  # (folder, on_finished)
+        self._selected_folder: Optional[str] = None
         self._init_ui()
         self._try_restore_project()
 
@@ -116,6 +117,9 @@ class MainWindow(QMainWindow):
         rename_action = QAction("批量重命名", self)
         rename_action.triggered.connect(self._open_rename_dialog)
 
+        extract_action = QAction("全量解压", self)
+        extract_action.triggered.connect(self._open_extract_all)
+
         tool_menu.aboutToShow.connect(lambda: self._update_toolbar("工具"))
 
         # 帮助菜单
@@ -135,7 +139,7 @@ class MainWindow(QMainWindow):
         # 存入字典，供功能栏使用
         self._toolbar_actions = {
             "文件": [open_action, save_action, exit_action],
-            "工具": [rename_action],
+            "工具": [rename_action, extract_action],
             "帮助": [manual_action, welcome_action, about_action],
         }
 
@@ -269,6 +273,7 @@ class MainWindow(QMainWindow):
 
     def _on_folder_selected(self, folder_path: str) -> None:
         """左侧面板选中文件夹回调，后台扫描并加载精灵图。"""
+        self._selected_folder = folder_path
         self.thumbnail_view.show_progress()
         self._start_scan(folder_path, on_finished=self._on_tree_scan_finished)
 
@@ -354,6 +359,48 @@ class MainWindow(QMainWindow):
         """关闭窗口前保存根目录列表到配置。"""
         self._save_root_paths()
         super().closeEvent(event)
+
+    def _open_extract_all(self) -> None:
+        """打开全量解压功能。"""
+        from gdm.core.extractor import find_archives, extract_all
+        from PySide6.QtWidgets import QMessageBox
+
+        directory = self._selected_folder or (self._project.root_path if self._project else None)
+        if directory is None:
+            QMessageBox.warning(self, "全量解压", "请先在项目面板中选择一个目录")
+            return
+
+        archives = find_archives(directory)
+        if not archives:
+            QMessageBox.information(self, "全量解压", "未发现压缩包")
+            return
+
+        total_size = sum(os.path.getsize(p) for p in archives)
+        size_mb = total_size / (1024 * 1024)
+
+        reply = QMessageBox.question(
+            self,
+            "全量解压",
+            f"共发现 {len(archives)} 个压缩包，总大小 {size_mb:.1f} MB\n"
+            f"解压后原始压缩包将被删除",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        success, fail, failed_list = extract_all(directory)
+
+        msg = f"解压完成：成功 {success} 个，失败 {fail} 个"
+        if failed_list:
+            msg += "\n\n失败文件：\n" + "\n".join(failed_list[:10])
+            if len(failed_list) > 10:
+                msg += f"\n... 共 {len(failed_list)} 个"
+
+        QMessageBox.information(self, "全量解压", msg)
+
+        # 刷新视图
+        self._on_folder_selected(directory)
 
     def _update_toolbar(self, menu_name: str) -> None:
         """根据菜单名称更新功能栏内容。"""
