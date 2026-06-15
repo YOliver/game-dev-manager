@@ -252,3 +252,28 @@ class TestTryRestoreProjectMultipleRoots:
                 assert mock_add_root.call_count == 2
             finally:
                 window.close()
+
+
+class TestToolbarCreation:
+    """测试功能栏的创建和默认显示。"""
+
+    def test_toolbar_exists_and_is_q_toolbar(
+        self, main_window
+    ):
+        """MainWindow 应包含一个 QToolBar 实例。"""
+        from PySide6.QtWidgets import QToolBar
+
+        assert hasattr(main_window, "toolbar")
+        assert isinstance(main_window.toolbar, QToolBar)
+
+    def test_toolbar_default_actions(
+        self, main_window
+    ):
+        """默认应显示"文件"菜单的子项。"""
+        expected_texts = ["打开文件夹", "保存工作区", "退出"]
+
+        actual_texts = []
+        for action in main_window.toolbar.actions():
+            actual_texts.append(action.text())
+
+        assert actual_texts == expected_texts
