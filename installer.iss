@@ -11,6 +11,7 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\GameDevManager.exe
+SetupIconFile=resources\app_icon.ico
 
 [Files]
 Source: "dist\GameDevManager.exe"; DestDir: "{app}"; Flags: ignoreversion
