@@ -182,3 +182,31 @@ class TestSaveRootPaths:
         config = load_config()
         assert config is not None
         assert config.get("root_paths") == dirs
+
+
+class TestCloseEventSavesRootPaths:
+    """测试 closeEvent() 应保存 root_paths 到配置。"""
+
+    def test_close_event_saves_root_paths(
+        self, tmp_path, monkeypatch, mock_scan, mock_ui_components, qapp
+    ):
+        """关闭主窗口前应调用 _save_root_paths()。"""
+        from gdm.core.config import save_config
+
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+
+        # 先保存根目录配置
+        root_a = str(tmp_path / "root_a")
+        root_b = str(tmp_path / "root_b")
+        os.makedirs(root_a, exist_ok=True)
+        os.makedirs(root_b, exist_ok=True)
+        save_config({"root_paths": [root_a, root_b]})
+
+        with patch("gdm.gui.main_window.MainWindow._save_root_paths") as mock_save:
+            from gdm.gui.main_window import MainWindow
+
+            window = MainWindow()
+            window.close()
+
+            # 验证 closeEvent 触发了 _save_root_paths
+            mock_save.assert_called_once()
