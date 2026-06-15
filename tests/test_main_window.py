@@ -34,13 +34,18 @@ def mock_ui_components():
     """模拟 UI 组件，使其具有正确的信号和方法。"""
 
     class MockProjectPanel(QWidget):
-        """模拟 ProjectPanel，具有 folder_selected 信号和 set_root 方法。"""
+        """模拟 ProjectPanel，具有 folder_selected 信号和 add_root 方法。"""
         folder_selected = Signal(str)
+        root_removed = Signal(str)
 
         def __init__(self, parent=None):
             super().__init__(parent)
+            self.tree = MagicMock()
 
-        def set_root(self, path):
+        def add_root(self, path):
+            pass
+
+        def remove_root(self, path):
             pass
 
     class MockThumbnailView(QWidget):

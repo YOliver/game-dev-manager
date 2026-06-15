@@ -1,13 +1,15 @@
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QMenu, QMessageBox
 from PySide6.QtCore import Signal
 from pathlib import Path
+import os
 
 
 class ProjectPanel(QWidget):
-    """工作区文件夹树面板。"""
+    """工作区文件夹树面板（支持多根目录）。"""
     _GREEN = QColor("#22c55e")  # 含图片目录的字体颜色
     folder_selected = Signal(str)  # 选中的文件夹路径
+    root_removed = Signal(str)  # 移除的根目录路径
 
     def __init__(self):
         super().__init__()
@@ -47,20 +49,44 @@ class ProjectPanel(QWidget):
         self.tree.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.tree)
 
-    def set_root(self, path: str):
-        """设置工作区根目录，构建文件夹树。"""
-        self.root_path = path
+    def add_root(self, path: str) -> None:
+        """追加一个根目录到树中。
+
+        - 检测路径是否存在，不存在则提示
+        - 检查是否已存在，避免重复顶级项
+        - 构建子树并追加为顶级项
+        """
+        # 检查路径是否存在
+        if not os.path.isdir(path):
+            QMessageBox.warning(self, "警告", f"目录不存在:\n{path}")
+            return
+
+        # 检查是否已存在
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            if item.data(0, 42) == path:
+                return  # 已存在，跳过
+
+        # 构建子树并追加为顶级项
         try:
             self._img_dirs = self._build_img_dirs(path)
         except Exception:
             self._img_dirs = set()
-        self.tree.clear()
+
         root_item = QTreeWidgetItem(self.tree, [Path(path).name])
-        root_item.setData(0, 42, path)  # 存储完整路径
+        root_item.setData(0, 42, path)
         if path in self._img_dirs:
             root_item.setForeground(0, self._GREEN)
         self._populate_tree(root_item, path)
         self.tree.expandItem(root_item)
+
+    def remove_root(self, path: str) -> None:
+        """从树中移除指定根目录。"""
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            if item.data(0, 42) == path:
+                self.tree.takeTopLevelItem(i)
+                break
 
     def _populate_tree(self, parent_item: QTreeWidgetItem, parent_path: str):
         """递归填充子目录。"""
@@ -100,3 +126,22 @@ class ProjectPanel(QWidget):
         path = item.data(0, 42)
         if path:
             self.folder_selected.emit(path)
+
+    def contextMenuEvent(self, event) -> None:
+        """右键菜单：只对顶级项显示"移除"选项。"""
+        item = self.tree.itemAt(event.pos())
+        if item is None:
+            return
+
+        # 判断是否为顶级项（根目录）
+        if item.parent() is None:
+            menu = QMenu(self)
+            remove_action = menu.addAction("从工作区移除")
+            remove_action.triggered.connect(lambda: self._on_remove_root(item))
+            menu.exec(event.globalPos())
+
+    def _on_remove_root(self, item) -> None:
+        """处理移除根目录请求。"""
+        path = item.data(0, 42)
+        self.remove_root(path)
+        self.root_removed.emit(path)

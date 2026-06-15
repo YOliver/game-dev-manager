@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
         # 左侧：项目面板
         self.project_panel = ProjectPanel()
         self.project_panel.folder_selected.connect(self._on_folder_selected)
+        self.project_panel.root_removed.connect(self._on_root_removed)
         splitter.addWidget(self.project_panel)
 
         # 中间：缩略图视图
@@ -162,7 +163,7 @@ class MainWindow(QMainWindow):
     def _set_workspace(self, folder: str) -> None:
         """设置工作区根目录，后台扫描并加载精灵图。"""
         self._project = Project(root_path=folder)
-        self.project_panel.set_root(folder)
+        self.project_panel.add_root(folder)
 
         # 显示进度界面
         self.thumbnail_view.show_progress()
@@ -202,16 +203,27 @@ class MainWindow(QMainWindow):
         if config is None:
             return
 
-        last_folder = config.get("last_folder")
-        if last_folder is None:
-            return
+        # 恢复多个根目录
+        root_paths = config.get("root_paths", [])
+        if not root_paths:
+            # 兼容旧版本：使用 last_folder
+            last_folder = config.get("last_folder")
+            if last_folder and os.path.isdir(last_folder):
+                root_paths = [last_folder]
+            else:
+                return
 
-        if not os.path.isdir(last_folder):
-            return
+        # 设置当前项目（使用第一个根目录）
+        self._project = Project(root_path=root_paths[0])
 
-        # 恢复 UI 状态（跳过再次保存，避免覆盖）
-        self._project = Project(root_path=last_folder)
-        self.project_panel.set_root(last_folder)
+        # 恢复所有根目录
+        for path in root_paths:
+            if os.path.isdir(path):
+                self.project_panel.add_root(path)
+
+        # 扫描第一个根目录
+        if os.path.isdir(root_paths[0]):
+            self._on_folder_selected(root_paths[0])
 
         # 显示进度界面
         self.thumbnail_view.show_progress()
@@ -270,3 +282,21 @@ class MainWindow(QMainWindow):
         if self._current_sprites:
             current_folder = os.path.dirname(self._current_sprites[0].file_path)
             self._on_folder_selected(current_folder)
+
+    def _save_root_paths(self) -> None:
+        """保存当前所有根目录到配置。"""
+        root_paths = []
+        for i in range(self.project_panel.tree.topLevelItemCount()):
+            item = self.project_panel.tree.topLevelItem(i)
+            root_paths.append(item.data(0, 42))
+
+        try:
+            config = load_config() or {}
+            config["root_paths"] = root_paths
+            save_config(config)
+        except Exception as e:
+            logger.warning(f"保存配置失败: {e}")
+
+    def _on_root_removed(self, path: str) -> None:
+        """处理根目录移除请求，更新配置。"""
+        self._save_root_paths()
