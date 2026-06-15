@@ -119,6 +119,9 @@ class TestSetWorkspaceSavesConfig:
         assert config is not None
         assert config.get("last_folder") == test_folder
 
+        # 验证 root_paths 也被保存
+        assert config.get("root_paths") == [test_folder]
+
 
 class TestTryRestoreProjectLoadsConfig:
     """测试 _try_restore_project() 应从全局配置加载 last_folder。"""
