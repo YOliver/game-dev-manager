@@ -40,10 +40,15 @@ def mock_ui_components():
 
         def __init__(self, parent=None):
             super().__init__(parent)
+            self._roots = []
             self.tree = MagicMock()
 
         def add_root(self, path):
-            pass
+            item = MagicMock()
+            item.data.return_value = path
+            self._roots.append(item)
+            self.tree.topLevelItemCount.return_value = len(self._roots)
+            self.tree.topLevelItem.side_effect = lambda i: self._roots[i]
 
         def remove_root(self, path):
             pass
