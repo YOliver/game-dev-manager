@@ -1,6 +1,6 @@
 [Setup]
 AppName=Game Dev Manager
-AppVersion=1.1.0
+AppVersion=1.3.0
 AppPublisher=oliveryin
 DefaultDirName={autopf}\Game Dev Manager
 DefaultGroupName=Game Dev Manager
