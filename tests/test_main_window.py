@@ -277,3 +277,55 @@ class TestToolbarCreation:
             actual_texts.append(action.text())
 
         assert actual_texts == expected_texts
+
+
+class TestToolbarUpdate:
+    """测试点击菜单后功能栏应更新内容。"""
+
+    def test_toolbar_updates_on_menu_about_to_show(
+        self, main_window
+    ):
+        """点击工具菜单后，工具栏应显示工具菜单的子项。"""
+        # 获取菜单栏中的"工具"菜单
+        menu_bar = main_window.menuBar()
+        tool_menu = None
+        for action in menu_bar.actions():
+            if action.text() == "工具":
+                tool_menu = action.menu()
+                break
+
+        assert tool_menu is not None
+
+        # 触发 aboutToShow 信号
+        tool_menu.aboutToShow.emit()
+
+        # 验证工具栏已更新为工具菜单的子项
+        expected_texts = ["批量重命名"]
+        actual_texts = [action.text() for action in main_window.toolbar.actions()]
+        assert actual_texts == expected_texts
+
+    def test_toolbar_help_menu_actions(
+        self, main_window
+    ):
+        """点击帮助菜单后，工具栏应显示帮助菜单的子项。"""
+        menu_bar = main_window.menuBar()
+        help_menu = None
+        for action in menu_bar.actions():
+            if action.text() == "帮助":
+                help_menu = action.menu()
+                break
+
+        assert help_menu is not None
+
+        help_menu.aboutToShow.emit()
+
+        expected_texts = ["使用手册", "欢迎", "软件信息"]
+        actual_texts = [action.text() for action in main_window.toolbar.actions()]
+        assert actual_texts == expected_texts
+
+    def test_toolbar_ignores_separators(
+        self, main_window
+    ):
+        """功能栏中不应包含分隔线。"""
+        for action in main_window.toolbar.actions():
+            assert not action.isSeparator(), "工具栏不应包含分隔线"
