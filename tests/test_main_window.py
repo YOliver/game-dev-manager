@@ -329,3 +329,30 @@ class TestToolbarUpdate:
         """功能栏中不应包含分隔线。"""
         for action in main_window.toolbar.actions():
             assert not action.isSeparator(), "工具栏不应包含分隔线"
+
+
+class TestSelectedFolder:
+    """测试 _selected_folder 追踪选中的目录。"""
+
+    def test_selected_folder_initialized(self, main_window):
+        """_selected_folder 应初始化为 None。"""
+        assert main_window._selected_folder is None
+
+    def test_selected_folder_updated_on_folder_select(self, main_window, tmp_path):
+        """_on_folder_selected 应更新 _selected_folder。"""
+        test_dir = str(tmp_path / "test_dir")
+        os.makedirs(test_dir, exist_ok=True)
+
+        main_window._on_folder_selected(test_dir)
+
+        assert main_window._selected_folder == test_dir
+
+
+class TestExtractAllMenu:
+    """测试全量解压菜单项。"""
+
+    def test_extract_action_exists(self, main_window):
+        """全量解压 Action 应存在于 _toolbar_actions 工具列表中。"""
+        tool_actions = main_window._toolbar_actions.get("工具", [])
+        texts = [a.text() for a in tool_actions]
+        assert "全量解压" in texts
