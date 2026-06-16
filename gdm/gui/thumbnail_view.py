@@ -8,7 +8,7 @@
 """
 
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPixmap
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QStyle,
 )
 
+from gdm.core.cache import CachedEntry
 from gdm.core.models import SpriteInfo
 
 
@@ -393,6 +394,95 @@ class ThumbnailView(QWidget):
 
         # 根据当前窗口宽度进行自适应排列
         self._relayout()
+
+    def _entry_to_sprite(self, entry: CachedEntry) -> SpriteInfo:
+        """从 CachedEntry 重建 SpriteInfo，UI 下游消费方无需感知。"""
+        full_path = os.path.join(entry.folder_path, entry.file_name)
+        return SpriteInfo(
+            file_path=full_path,
+            file_name=entry.file_name,
+            width=entry.width,
+            height=entry.height,
+            file_size=entry.size,
+            format=entry.format,
+            color_mode=entry.color_mode,
+        )
+
+    def _decode_thumb(self, entry: CachedEntry) -> Optional[QPixmap]:
+        """把 thumb_blob 解码为 QPixmap，无效时返回 None。"""
+        if not entry.thumb_blob:
+            return None
+        if entry.thumb_mtime_ns is None or entry.thumb_mtime_ns != entry.mtime_ns:
+            return None
+        pix = QPixmap()
+        if not pix.loadFromData(entry.thumb_blob, "WEBP"):
+            return None
+        return pix
+
+    def load_from_cache(self, root: str, entries: List[CachedEntry]) -> None:
+        """用缓存数据立即铺 UI（亚秒级首屏）。
+
+        Args:
+            root: 用户点击的根目录（仅用于上下文，不直接展示）
+            entries: 已从 DB 取出的所有缓存条目（递归）
+        """
+        self._progress_widget.setVisible(False)
+        self._list_widget.setVisible(True)
+
+        sprites = [self._entry_to_sprite(e) for e in entries]
+        self._sprites = list(sprites)
+        self._items.clear()
+        self._pending_workers.clear()
+        self._list_widget.clear()
+
+        for entry, sprite in zip(entries, sprites):
+            item = QListWidgetItem(sprite.file_name)
+            item.setData(Qt.ItemDataRole.UserRole, sprite)
+            self._list_widget.addItem(item)
+            self._items[sprite.file_path] = item
+
+            pix = self._decode_thumb(entry)
+            if pix is not None:
+                item.setIcon(QIcon(pix))
+                self._thumbnails[sprite.file_path] = pix
+            # 否则保持空图标，留待 apply_entries_updated 或异步 worker 补齐
+
+        self._relayout()
+
+    def apply_entries_updated(self, entries: List[CachedEntry]) -> None:
+        """后台 diff 完成一批后增量更新 UI。"""
+        for entry in entries:
+            sprite = self._entry_to_sprite(entry)
+            item = self._items.get(sprite.file_path)
+            if item is None:
+                # 新增项
+                item = QListWidgetItem(sprite.file_name)
+                item.setData(Qt.ItemDataRole.UserRole, sprite)
+                self._list_widget.addItem(item)
+                self._items[sprite.file_path] = item
+                self._sprites.append(sprite)
+            else:
+                # 更新已有项的数据
+                item.setData(Qt.ItemDataRole.UserRole, sprite)
+
+            pix = self._decode_thumb(entry)
+            if pix is not None:
+                item.setIcon(QIcon(pix))
+                self._thumbnails[sprite.file_path] = pix
+
+    def apply_entries_removed(self, keys: List[Tuple[str, str]]) -> None:
+        """根据 (folder_path, file_name) 列表移除项。"""
+        for folder, name in keys:
+            full_path = os.path.join(folder, name)
+            item = self._items.pop(full_path, None)
+            if item is None:
+                continue
+            row = self._list_widget.row(item)
+            if row >= 0:
+                self._list_widget.takeItem(row)
+            # 同步从 _sprites / _thumbnails 移除
+            self._sprites = [s for s in self._sprites if s.file_path != full_path]
+            self._thumbnails.pop(full_path, None)
 
     def _load_thumbnail_async(self, sprite: SpriteInfo) -> None:
         """异步加载单个精灵图的缩略图。
