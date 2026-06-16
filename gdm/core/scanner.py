@@ -8,6 +8,7 @@ from typing import Callable, List, Optional
 
 from gdm.core.models import SpriteInfo
 from gdm.core.metadata import extract
+from gdm.utils.helpers import is_hidden
 
 # 支持的图片扩展名
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -32,7 +33,9 @@ def scan(directory: str, recursive: bool = False) -> List[SpriteInfo]:
     pattern = "**/*" if recursive else "*"
 
     for file_path in path.glob(pattern):
-        if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+        if (file_path.is_file()
+            and file_path.suffix.lower() in SUPPORTED_EXTENSIONS
+            and not is_hidden(file_path)):
             sprites.append(extract(str(file_path)))
 
     return sprites
@@ -62,7 +65,9 @@ def scan_with_progress(
     # 阶段1：收集所有图片路径（仅检查扩展名，不读取内容）
     image_paths: list[str] = []
     for file_path in path.glob(pattern):
-        if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+        if (file_path.is_file()
+            and file_path.suffix.lower() in SUPPORTED_EXTENSIONS
+            and not is_hidden(file_path)):
             image_paths.append(str(file_path))
 
     total = len(image_paths)

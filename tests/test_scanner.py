@@ -128,3 +128,33 @@ class TestScan:
         result = scan(str(tmp_path), recursive=False)
 
         assert len(result) == 3
+
+    def test_scan_hidden_files_skipped(self, tmp_path):
+        """测试扫描时跳过文件名以 . 开头的隐藏文件。"""
+        img = Image.new("RGBA", (32, 32), (255, 0, 0, 255))
+        img.save(tmp_path / "normal.png", "PNG")
+        # 创建隐藏文件（模拟 macOS AppleDouble 文件）
+        (tmp_path / "._hidden.png").write_bytes(b"fake png content")
+        (tmp_path / ".DS_Store").write_bytes(b"fake ds store")
+
+        result = scan(str(tmp_path), recursive=False)
+
+        # 只应返回 normal.png
+        assert len(result) == 1
+        assert result[0].file_name == "normal.png"
+
+    def test_scan_hidden_directory_files_still_scanned(self, tmp_path):
+        """测试隐藏在隐藏目录中的普通文件仍被扫描。"""
+        # 创建隐藏目录
+        hidden_dir = tmp_path / ".__MACOSX"
+        hidden_dir.mkdir()
+        # 隐藏目录中的普通文件仍应被扫描
+        img = Image.new("RGBA", (16, 16), (0, 255, 0, 255))
+        img.save(hidden_dir / "real_texture.png", "PNG")
+        # 隐藏目录中的隐藏文件应被跳过
+        (hidden_dir / "._real_texture.png").write_bytes(b"fake")
+
+        result = scan(str(tmp_path), recursive=True)
+
+        assert len(result) == 1
+        assert result[0].file_name == "real_texture.png"
