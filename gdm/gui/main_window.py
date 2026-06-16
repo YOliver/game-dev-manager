@@ -131,10 +131,6 @@ class MainWindow(QMainWindow):
         clear_cache_act = QAction("清空缩略图缓存", self)
         clear_cache_act.triggered.connect(self._on_clear_cache)
 
-        tool_menu.addAction(rename_action)
-        tool_menu.addAction(extract_action)
-        tool_menu.addAction(clear_cache_act)
-
         tool_menu.aboutToShow.connect(lambda: self._update_toolbar("工具"))
 
         # 帮助菜单
