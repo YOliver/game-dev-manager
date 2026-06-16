@@ -44,7 +44,10 @@
 - 不做手动指定缓存目录的功能
 - 不做缓存内容的可视化管理界面（仅一个"清空缓存"菜单项）
 - 不做目录重命名/移动后的缓存自动迁移（自然 LRU 过期）
-- 不做并行的缩略图生成（首版串行；如实测过慢再加）
+- 不做并行的缩略图生成（首版串行；如实测过慢再加，作为后续优化）
+- **不优化"首次访问新目录"的速度**：本次需求只解决"重复访问已扫过的目录"的问题。
+  首次访问仍走 DiffWorker 串行处理，与现状耗时相当（但 UI 不再阻塞主线程）。
+  并行化首次扫描作为后续独立优化跟踪
 
 ## 架构
 
@@ -66,9 +69,40 @@ gdm/core/cache/
 | 模块 | 职责 | 不做的事 |
 |---|---|---|
 | `db` | 只懂 SQLite，不懂业务 | 不知道何为 sprite |
-| `store` | 实体 CRUD + LRU 淘汰 | 不知道扫描，不知道 UI |
-| `diff` | 纯函数比对 | 不碰 DB，不碰文件系统外的状态 |
-| `scanner_cached` | 编排：取缓存 → diff → 增量更新 → 通知 UI | 不直接操作 SQL |
+| `store` | 实体 CRUD + LRU + 递归查询 | 不知道扫描，不知道 UI |
+| `diff` | 纯函数比对（按 (folder_path, file_name) 复合键） | 不碰 DB，不碰文件系统外的状态 |
+| `scanner_cached` | 编排：取递归缓存 → `os.walk` 列文件 → diff → 增量更新 → 通知 UI | 不直接操作 SQL |
+
+### 递归扫描的缓存语义
+
+**前提**：当前 `scanner.scan_with_progress` 默认 `recursive=True`，
+`MainWindow._on_folder_selected` 调用链全部走递归扫描。
+用户点击目录 D 时显示的是 D **及其所有后代目录**的图片。
+
+**缓存组织方式**：按"叶子目录"粒度存储，**不**按"被点击的目录"存储。
+
+- 每个 `entries` 行的 `folder_path` 是该图片**直接所在的目录**（不是被点击的根）
+- 用户点击 D → 查询 `WHERE folder_path = D OR folder_path LIKE 'D/%'` 的所有条目
+- 子目录新增/修改文件 → 只影响该子目录的缓存行，不波及兄弟目录
+- LRU 淘汰也按叶子目录粒度（`folders` 表每行就是一个叶子目录）
+
+**为什么选这个方案**：
+
+- 用户从 D 进、从 D 的子目录 D/sub 进时，**复用同一份缓存**，不重复存储
+- 修改 D/sub/x.png 只导致 D/sub 这一行缓存失效，D 下其他子目录无需 diff
+- LRU 粒度更细，常用子目录不会因偶尔点根目录导致整体被挤出
+
+**对 diff 流程的影响**：
+
+DiffWorker 在收到根目录 D 后，需要：
+1. 用 `os.walk(D)` 列出**所有后代叶子目录** + 每个目录下的图片文件名
+2. 用 `SELECT folder_path, file_name, ... FROM entries WHERE folder_path = D OR folder_path LIKE ?` 拿到所有相关缓存
+3. 按 `(folder_path, file_name)` 复合键做 diff，得到 added / changed / removed
+4. removed 也需要带 folder_path（同名文件可能存在于不同子目录）
+
+**`folder_path` 规范化**：
+- Windows 平台：`os.path.abspath` + `replace('\\', '/')` + `lower()`
+- 当前项目仅 Windows，跨平台支持是非目标
 
 ### 缓存目录路径
 
@@ -99,20 +133,24 @@ CREATE TABLE folders (
 
 -- 文件条目表
 CREATE TABLE entries (
-    folder_path    TEXT NOT NULL,
+    folder_path    TEXT NOT NULL,        -- 图片直接所在的目录（非用户点击的根目录）
     file_name      TEXT NOT NULL,        -- 仅文件名，不含路径
     mtime_ns       INTEGER NOT NULL,     -- os.stat().st_mtime_ns，纳秒精度
     size           INTEGER NOT NULL,     -- 字节
     width          INTEGER,              -- 可空：读取失败时为 NULL
     height         INTEGER,
     format         TEXT,                 -- 'PNG' / 'JPEG' / 'WEBP' ...
+    color_mode     TEXT,                 -- 'RGB' / 'RGBA' / 'P' ...，对应 SpriteInfo.color_mode
     thumb_blob     BLOB,                 -- 128×128 WebP 编码的缩略图，可空
     thumb_mtime_ns INTEGER,              -- 缩略图基于哪个版本生成的；与 mtime_ns 不一致即失效
     PRIMARY KEY (folder_path, file_name),
     FOREIGN KEY (folder_path) REFERENCES folders(folder_path) ON DELETE CASCADE
 );
 
+-- 用于按叶子目录精确查询
 CREATE INDEX idx_entries_folder ON entries(folder_path);
+-- 用于递归查询：WHERE folder_path LIKE 'D/%'
+-- SQLite 会用前缀索引扫描，不需要单独建
 ```
 
 ### Schema 设计要点
@@ -127,9 +165,12 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    缩略图还没来得及重做。读取时若 `thumb_mtime_ns != mtime_ns` 即视为缩略图失效，
    UI 显示占位图、等待后台重做。
 
-4. **`format` 字段**：为将来"按格式过滤"功能预留。当前几乎零成本。
+4. **`format` / `color_mode` 字段**：完整覆盖 `SpriteInfo` 的全部字段，
+   保证从缓存重建的 SpriteInfo 与 `metadata.extract()` 的输出语义一致，
+   `detail_panel` 等下游组件无需关心数据来源。
 
 5. **不存全路径**：仅 `folder_path + file_name`。DB 体积小。
+   完整路径在 UI 层按需拼接：`os.path.join(folder_path, file_name)`
 
 6. **连接初始化 PRAGMA**：
    - `journal_mode=WAL` — 读写并发好（UI 线程读、后台 diff 线程写）
@@ -151,14 +192,16 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    ├─① 取消上一个未完成的 DiffWorker（如果有）
    │     旧 worker 收到 cancel 后会停在下一张图前；已写入 DB 的部分保留
    │
-   ├─② store.touch_folder(D)
-   │     UPDATE folders SET last_access_at=now WHERE folder_path=D
-   │     （folders 行不存在则 INSERT）
+   ├─② store.touch_folders_under(D)
+   │     更新 D 及其所有后代叶子目录的 last_access_at
+   │     （新叶子目录的 folders 行延后到 mark_scan_done 时插入）
    │
-   ├─③ cached = store.get_entries(D)
-   │     SELECT file_name, width, height, mtime_ns, size,
-   │            thumb_blob, thumb_mtime_ns
-   │     FROM entries WHERE folder_path = D
+   ├─③ cached = store.get_entries_recursive(D)
+   │     SELECT folder_path, file_name, width, height, color_mode,
+   │            mtime_ns, size, format, thumb_blob, thumb_mtime_ns
+   │     FROM entries
+   │     WHERE folder_path = ? OR folder_path LIKE ?
+   │     参数: (D, D + '/%')
    │
    ├─④ 立即铺 UI（亚秒级首屏）
    │     thumbnail_view.load_from_cache(cached)
@@ -175,12 +218,18 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
          ▼
 [后台线程] DiffWorker.run(D, cached)
    │
-   ├─⑥ current = list(os.scandir(D))，按扩展名过滤
+   ├─⑥ current = []
+   │     for sub_dir, _, files in os.walk(D):
+   │         for f in files:
+   │             if ext(f) in SUPPORTED_EXTENSIONS:
+   │                 current.append((normalize(sub_dir), f, mtime_ns, size))
+   │     按扩展名过滤；记录每张图所在的"叶子目录"
    │
    ├─⑦ added, changed, removed = diff.compute(cached, current)
+   │     按 (folder_path, file_name) 复合键比对
    │     added:   current 有 cached 没有
-   │     changed: 同名但 mtime_ns 或 size 不同
-   │     removed: cached 有 current 没有
+   │     changed: 同复合键但 mtime_ns 或 size 不同
+   │     removed: cached 有 current 没有（带 folder_path，避免同名跨目录误删）
    │
    ├─⑧ 三者皆空 → emit scan_done(D)，结束
    │
@@ -195,8 +244,9 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    │     e) emit entries_updated(batch) → UI 替换/追加
    │     f) 每张前检查 self._cancelled.is_set()，True 则中断
    │
-   └─⑪ store.mark_scan_done(D) → 更新 last_scan_at
-        store.evict_lru_if_needed() → 检查淘汰
+   └─⑪ store.mark_scan_done(D 及所有涉及的叶子目录)
+        → UPSERT folders 行，更新 last_scan_at
+        store.evict_lru_if_needed() → 按 folders 表中 last_access_at 淘汰
         emit scan_done(D)
 ```
 
@@ -209,8 +259,10 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
 2. **DB 写在后台线程**：SQLite 在 `WAL + check_same_thread=False` 下可多线程访问。
    每个线程持独立 connection。**UI 线程只读，后台线程读写**。
 
-3. **首次访问目录的退化路径**：步骤 ④ UI 是空列表，步骤 ⑩ 走增量分批 emit，
-   体验等同于现有的"逐张异步加载"——不比现状差，但下次再点就秒开。
+3. **首次访问目录的退化路径**：步骤 ④ UI 是空列表，步骤 ⑩ 走增量分批 emit。
+   总耗时与现状相当（仍串行读 metadata + 生成缩略图），但 UI 不再阻塞主线程
+   （现状是 `processEvents` 伪后台），切其他目录可即时响应。
+   **下次再点就秒开**——这才是本次需求的核心收益。
 
 4. **跨目录的内存 LRU 保留**：`thumbnail_view._thumbnails`（500 张）继续使用，
    作为"DB blob → QPixmap 解码"的二级缓存，避免反复解码 WebP。
@@ -219,12 +271,13 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
 
 ### 淘汰策略
 
-1. **按目录 LRU**（主策略）：
-   - 上限：`MAX_CACHED_FOLDERS = 200`
+1. **按叶子目录 LRU**（主策略）：
+   - 上限：`MAX_CACHED_FOLDERS = 200`（注意：粒度是叶子目录，不是用户点击的根）
    - 触发：每次 `mark_scan_done` 后
    - 实现：`SELECT folder_path FROM folders ORDER BY last_access_at ASC LIMIT (count - 200)`，
      `DELETE FROM folders WHERE folder_path IN (...)`，CASCADE 自动清理 entries
-   - 容量估算：200 目录 × 1000 张/目录 × 4KB/张 ≈ **800MB**
+   - 容量估算：200 叶子目录 × 平均 100 张/叶子目录 × 4KB/张 ≈ **80MB**
+     （单个素材库被点一次，会登记其下所有叶子目录；200 上限可覆盖 ~10 个中等素材库）
 
 2. **按 DB 总大小硬上限**（兜底）：
    - 上限：`MAX_DB_SIZE_BYTES = 1_500_000_000`（1.5GB）
@@ -267,12 +320,39 @@ BATCH_EMIT_SIZE = 20
 
 ## 并发模型
 
-- **UI 线程**：只读 DB，常驻 connection（在 `get_cache()` 单例中）
-- **DiffWorker（QThreadPool）**：独立 connection，`run()` 开头建、结束关
-- **同一时刻只允许一个 DiffWorker**：用 `_active_worker` 引用守住，新点击先 cancel 旧的
-- **缩略图生成串行**：在 DiffWorker 内做。Pillow GIL 释放在 IO 段，CPU 并行收益有限。
-  若实测 1000 张图首次扫描 > 30s 再考虑加并行
-- **取消信号**：`threading.Event`，UI 线程 `set()`，worker 每张图前 `is_set()` 检查
+### 硬性规则：SQLite connection 不跨线程共享
+
+Python `sqlite3` 模块默认拒绝跨线程使用同一 connection。即使设置
+`check_same_thread=False`，跨线程共享仍然容易出 race。本设计的硬性规则：
+
+- **每个线程独立创建自己的 connection**，使用完毕**当场关闭**
+- `get_cache()` 单例**只持有配置和路径**，不持有 connection
+- `store` 模块的每个公开方法签名是 `def xxx(conn, ...)`，由调用方传入 connection
+- 错误用法（必须在 code review 时拒绝）：模块级全局 connection、`get_cache()` 返回 connection
+
+### 线程职责
+
+- **UI 线程**：仅在需要查询缓存时 `with sqlite3.connect(...)` 创建短生命 connection。
+  典型场景是 `_on_folder_selected` 调用 `get_entries_recursive`，毫秒级释放
+- **DiffWorker（QThreadPool）**：`run()` 开头创建 connection，结束 `close()`。
+  整个 diff + upsert 过程共用这一个 connection
+- **App 退出时的 VACUUM**：在专门的清理线程里做，独立 connection
+
+### 串行化
+
+- **同一时刻只允许一个 DiffWorker** 在跑
+- 新点击触发时，先 `_active_worker._cancelled.set()`，再启动新 worker
+- 旧 worker 收到 cancel 后在下一张图前停止，已写入 DB 的部分保留
+- **WAL 模式**保证：旧 worker 还没退出时，新 worker / UI 线程的读不会被阻塞
+
+### 缩略图生成串行（在 DiffWorker 内）
+
+- Pillow GIL 释放在 IO 段，CPU 并行收益有限
+- 上千张图首次扫描的并行化作为后续优化（参见"非目标"）
+
+### 取消信号
+
+`threading.Event`，UI 线程 `set()`，worker 每张图前 `is_set()` 检查
 
 ## 测试策略
 
@@ -282,10 +362,10 @@ BATCH_EMIT_SIZE = 20
 
 | 测试文件 | 覆盖内容 |
 |---|---|
-| `test_diff.py` | 纯函数 diff 的全部边界：空缓存、空目录、added/changed/removed 各种组合、相同 mtime 不同 size、相同 size 不同 mtime |
-| `test_store.py` | 用 `:memory:` SQLite 做 CRUD、`touch_folder`、`evict_lru_if_needed`、size 上限测试 |
-| `test_db.py` | schema 初始化、`integrity_check` 失败时的损坏库恢复 |
-| `test_scanner_cached.py` | 集成：用 `tmp_path` 造真实图片目录（几张小 PNG），跑两次 `load_folder_cached`，断言第二次走缓存、修改后能正确增量更新 |
+| `test_diff.py` | 纯函数 diff 的全部边界：空缓存、空目录、added/changed/removed 各种组合、相同 mtime 不同 size、相同 size 不同 mtime、**多叶子目录复合键 diff**、**同名文件跨子目录不误判** |
+| `test_store.py` | 用 `:memory:` SQLite 做 CRUD、`touch_folders_under`、`get_entries_recursive`（前缀 LIKE 查询正确性）、`evict_lru_if_needed`、size 上限测试 |
+| `test_db.py` | schema 初始化、`auto_vacuum=INCREMENTAL` 设置、`integrity_check` 失败时的损坏库恢复 |
+| `test_scanner_cached.py` | 集成：用 `tmp_path` 造**多层嵌套**图片目录（几张小 PNG 散落在子目录），跑两次 `load_folder_cached`，断言第二次走缓存、修改后能正确增量更新、子目录修改不影响兄弟目录 |
 
 **不写的测试**：
 
@@ -340,3 +420,5 @@ BATCH_EMIT_SIZE = 20
 | 1000+ 行的 SELECT 反序列化 thumb_blob 慢 | 实测若 > 100ms 则改为分页加载（先出元数据，blob 按需懒加载） |
 | 200 目录上限不够某些重度用户 | 当前是写死常量；如有反馈再升级为可配置 |
 | Pillow 读取损坏图片崩溃整个 worker | 每张图单独 try/except，单个失败不影响整体 |
+| `LIKE 'D/%'` 在 200 叶子目录下查询过慢 | 主键 (folder_path, file_name) 已覆盖前缀扫描；实测若 > 100ms 再加 `idx_entries_folder_prefix` |
+| 同名文件分布在多个子目录中导致 diff 误判 | diff 用复合键 `(folder_path, file_name)`，专门测试覆盖该场景 |
