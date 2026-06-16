@@ -205,8 +205,10 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    │
    ├─④ 立即铺 UI（亚秒级首屏）
    │     thumbnail_view.load_from_cache(cached)
-   │     入参 cached 是 List[CachedEntry]，CachedEntry 含
-   │     file_name / width / height / mtime_ns / thumb_blob / thumb_mtime_ns
+   │     入参 cached 是 List[CachedEntry]，CachedEntry 含 SpriteInfo 全部字段：
+   │     folder_path / file_name / width / height / size / format / color_mode
+   │     + 缓存校验字段：mtime_ns / thumb_blob / thumb_mtime_ns
+   │     UI 用 os.path.join(folder_path, file_name) 拼出 SpriteInfo.file_path
    │     - 元数据有效  → 显示文件名/尺寸
    │     - thumb_blob 非空且 thumb_mtime_ns == mtime_ns
    │       → QPixmap.loadFromData(blob, "WEBP") 解码后显示
@@ -233,7 +235,8 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    │
    ├─⑧ 三者皆空 → emit scan_done(D)，结束
    │
-   ├─⑨ store.delete_entries(D, removed)
+   ├─⑨ store.delete_entries(removed)
+   │     removed: List[(folder_path, file_name)]
    │     emit entries_removed(removed) → UI 移除对应项
    │
    ├─⑩ 对 added + changed 的每张图：
@@ -256,8 +259,8 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    UI 线程在切目录时 `set()`。worker 在每张图处理前 `is_set()` 检查。
    已写入的部分保留，下次访问该目录时正好是部分缓存。
 
-2. **DB 写在后台线程**：SQLite 在 `WAL + check_same_thread=False` 下可多线程访问。
-   每个线程持独立 connection。**UI 线程只读，后台线程读写**。
+2. **DB 写在后台线程**：UI 线程只读、后台线程读写。
+   每个线程持独立 connection（详见"并发模型"章节的硬性规则）。
 
 3. **首次访问目录的退化路径**：步骤 ④ UI 是空列表，步骤 ⑩ 走增量分批 emit。
    总耗时与现状相当（仍串行读 metadata + 生成缩略图），但 UI 不再阻塞主线程
@@ -291,7 +294,7 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
 ### 手动清理入口
 
 - 设置/工具菜单新增 "**清空缩略图缓存**" → `store.clear_all()` + `VACUUM`
-- 缩略图视图右键菜单新增 "**重新扫描此目录**" → `store.delete_folder(D)` 后立即触发完整扫描
+- 缩略图视图右键菜单新增 "**重新扫描此目录**" → `store.delete_folders_under(D)` 后立即触发完整扫描
 
 ### 配置常量
 
@@ -312,7 +315,8 @@ BATCH_EMIT_SIZE = 20
 |---|---|
 | Pillow 读某张图失败 | entries 记录里 width/height/format 写 NULL，thumb_blob 写 NULL，**不抛异常**。UI 显示占位图。下次 mtime 变了再重试 |
 | 缩略图生成失败 | 元数据照常 upsert，thumb_blob 留 NULL。UI 显示占位图，不阻塞其他图 |
-| `os.scandir` 时目录被删 | 捕获 `FileNotFoundError` → `store.delete_folder(D)` → emit `folder_gone(D)` |
+| `os.walk` 时根目录被删 | 捕获 `FileNotFoundError` → `store.delete_folders_under(D)` → emit `folder_gone(D)` |
+| `os.walk` 中途某个子目录消失 | `os.walk` 静默跳过；下一次 diff 时该子目录的条目自然进入 `removed` |
 | DB 写入失败（磁盘满 / 权限） | 捕获 `sqlite3.OperationalError` → log warning，**降级为无缓存模式**（流程退化为现有 `scan_with_progress`）。不弹窗骚扰用户 |
 | DB 损坏 | 启动时 `PRAGMA integrity_check`，失败则改名为 `cache.db.corrupted-<ts>`，新建空库，记 warning |
 | 用户在 diff 跑到一半时退出 App | 后台线程收到 cancel 信号，已写入 entries 保留 |
