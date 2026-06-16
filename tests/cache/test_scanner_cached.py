@@ -47,6 +47,23 @@ class TestSnapshotFolder:
         snaps = snapshot_folder(str(tmp_path / "nonexistent"))
         assert snaps == []
 
+    def test_skips_hidden_files(self, tmp_path):
+        """测试 snapshot_folder 跳过文件名以 . 开头的文件。"""
+        _make_png(tmp_path / "normal.png")
+        (tmp_path / "._apple_double.png").write_bytes(b"fake png")
+        (tmp_path / ".hidden.png").write_bytes(b"fake png")
+        snaps = snapshot_folder(str(tmp_path))
+        assert [s.file_name for s in snaps] == ["normal.png"]
+
+    def test_does_not_skip_hidden_dirs(self, tmp_path):
+        """测试隐藏目录内的普通文件仍被扫描。"""
+        hidden_dir = tmp_path / ".__MACOSX"
+        hidden_dir.mkdir()
+        _make_png(hidden_dir / "real_texture.png")
+        (hidden_dir / "._real_texture.png").write_bytes(b"fake png")
+        snaps = snapshot_folder(str(tmp_path))
+        assert [s.file_name for s in snaps] == ["real_texture.png"]
+
 
 class TestProcessDiffSync:
     """端到端：用 process_diff_sync（同步版 DiffWorker.run）测全流程。"""

@@ -54,6 +54,8 @@ def snapshot_folder(root: str) -> List[FileSnapshot]:
         return out
     for sub_dir, _dirs, files in os.walk(root):
         for fname in files:
+            if fname.startswith("."):
+                continue
             ext = os.path.splitext(fname)[1].lower()
             if ext not in SUPPORTED_EXTENSIONS:
                 continue
