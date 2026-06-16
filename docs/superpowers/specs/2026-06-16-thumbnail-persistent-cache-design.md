@@ -135,6 +135,8 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    - `journal_mode=WAL` — 读写并发好（UI 线程读、后台 diff 线程写）
    - `synchronous=NORMAL` — 缓存数据丢一点能接受，换性能
    - `foreign_keys=ON` — 让 CASCADE 生效
+   - `auto_vacuum=INCREMENTAL` — 仅在**首次创建** DB 时设置（建库前执行）；
+     允许后续用 `PRAGMA incremental_vacuum(N)` 按页回收空间
 
 ## 核心流程
 
@@ -160,8 +162,12 @@ CREATE INDEX idx_entries_folder ON entries(folder_path);
    │
    ├─④ 立即铺 UI（亚秒级首屏）
    │     thumbnail_view.load_from_cache(cached)
+   │     入参 cached 是 List[CachedEntry]，CachedEntry 含
+   │     file_name / width / height / mtime_ns / thumb_blob / thumb_mtime_ns
    │     - 元数据有效  → 显示文件名/尺寸
-   │     - thumb 有效且 thumb_mtime_ns == mtime_ns → 显示缩略图
+   │     - thumb_blob 非空且 thumb_mtime_ns == mtime_ns
+   │       → QPixmap.loadFromData(blob, "WEBP") 解码后显示
+   │       同时写入内存 LRU（_thumbnails），后续滚动复用
    │     - thumb 无效 → 显示占位图，等待后台补齐
    │
    └─⑤ 启动后台 DiffWorker（QThreadPool，单实例）
