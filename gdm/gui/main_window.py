@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         # 存入字典，供功能栏使用
         self._toolbar_actions = {
             "文件": [open_action, save_action, exit_action],
-            "工具": [rename_action, extract_action],
+            "工具": [rename_action, extract_action, clear_cache_act],
             "帮助": [manual_action, welcome_action, about_action],
         }
 
