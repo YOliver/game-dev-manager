@@ -93,10 +93,10 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(4, 4, 4, 4)
         main_layout.addWidget(splitter)
 
-        # 功能栏
+        # 底部功能栏
         self.toolbar = QToolBar("功能栏")
         self.toolbar.setMovable(False)
-        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
+        self.addToolBar(Qt.BottomToolBarArea, self.toolbar)
 
         # 菜单栏
         self._init_menubar()
@@ -105,61 +105,60 @@ class MainWindow(QMainWindow):
         """初始化菜单栏和功能栏 Action。"""
         menubar = self.menuBar()
 
-        # 文件菜单 — Action 独立创建，不加入菜单
+        # 文件菜单
         file_menu = menubar.addMenu("文件")
 
         open_action = QAction("打开文件夹", self)
         open_action.triggered.connect(self._open_folder)
+        file_menu.addAction(open_action)
 
         save_action = QAction("保存工作区", self)
         save_action.triggered.connect(self._save_project)
+        file_menu.addAction(save_action)
 
         exit_action = QAction("退出", self)
         exit_action.triggered.connect(self.close)
-
-        file_menu.aboutToShow.connect(lambda: self._update_toolbar("文件"))
+        file_menu.addAction(exit_action)
 
         # 工具菜单
         tool_menu = menubar.addMenu("工具")
 
         rename_action = QAction("批量重命名", self)
         rename_action.triggered.connect(self._open_rename_dialog)
+        tool_menu.addAction(rename_action)
 
         extract_action = QAction("全量解压", self)
         extract_action.triggered.connect(self._open_extract_all)
+        tool_menu.addAction(extract_action)
 
         clear_cache_act = QAction("清空缩略图缓存", self)
         clear_cache_act.triggered.connect(self._on_clear_cache)
-
-        tool_menu.addAction(rename_action)
-        tool_menu.addAction(extract_action)
         tool_menu.addAction(clear_cache_act)
-
-        tool_menu.aboutToShow.connect(lambda: self._update_toolbar("工具"))
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助")
 
         manual_action = QAction("使用手册", self)
         manual_action.triggered.connect(lambda: self._open_help_doc("使用手册.md"))
+        help_menu.addAction(manual_action)
 
         welcome_action = QAction("欢迎", self)
         welcome_action.triggered.connect(lambda: self._open_help_doc("welcome.md"))
+        help_menu.addAction(welcome_action)
 
         about_action = QAction("软件信息", self)
         about_action.triggered.connect(lambda: self._open_help_doc("about.md"))
+        help_menu.addAction(about_action)
 
-        help_menu.aboutToShow.connect(lambda: self._update_toolbar("帮助"))
-
-        # 存入字典，供功能栏使用
-        self._toolbar_actions = {
-            "文件": [open_action, save_action, exit_action],
-            "工具": [rename_action, extract_action],
-            "帮助": [manual_action, welcome_action, about_action],
-        }
-
-        # 默认显示"文件"菜单的功能项
-        self._update_toolbar("文件")
+        # 将所有功能按钮直接添加到底部工具栏
+        self.toolbar.addAction(open_action)
+        self.toolbar.addAction(save_action)
+        self.toolbar.addSeparator()
+        self.toolbar.addAction(rename_action)
+        self.toolbar.addAction(extract_action)
+        self.toolbar.addAction(clear_cache_act)
+        self.toolbar.addSeparator()
+        self.toolbar.addAction(manual_action)
 
     # ------------------------------------------------------------------ #
     #  工作区管理
@@ -494,12 +493,6 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "全量解压", msg)
 
         self._on_folder_selected(directory)
-
-    def _update_toolbar(self, menu_name: str) -> None:
-        """根据菜单名称更新功能栏内容。"""
-        self.toolbar.clear()
-        for action in self._toolbar_actions.get(menu_name, []):
-            self.toolbar.addAction(action)
 
     def _on_clear_cache(self) -> None:
         """清空所有缩略图缓存（DB + VACUUM）。"""
