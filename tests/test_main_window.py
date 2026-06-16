@@ -317,7 +317,7 @@ class TestToolbarUpdate:
         tool_menu.aboutToShow.emit()
 
         # 验证工具栏已更新为工具菜单的子项
-        expected_texts = ["批量重命名", "全量解压"]
+        expected_texts = ["批量重命名", "全量解压", "清空缩略图缓存"]
         actual_texts = [action.text() for action in main_window.toolbar.actions()]
         assert actual_texts == expected_texts
 
@@ -346,6 +346,17 @@ class TestToolbarUpdate:
         """功能栏中不应包含分隔线。"""
         for action in main_window.toolbar.actions():
             assert not action.isSeparator(), "工具栏不应包含分隔线"
+
+    def test_tool_menu_has_no_children(self, main_window):
+        """工具菜单不应包含下拉子项。"""
+        menu_bar = main_window.menuBar()
+        tool_menu = None
+        for action in menu_bar.actions():
+            if action.text() == "工具":
+                tool_menu = action.menu()
+                break
+        assert tool_menu is not None
+        assert len(tool_menu.actions()) == 0
 
 
 class TestSelectedFolder:
