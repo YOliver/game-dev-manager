@@ -1,0 +1,126 @@
+"""测试 cache.store：DB CRUD + 递归查询 + LRU。"""
+
+import pytest
+
+from gdm.core.cache import CachedEntry
+from gdm.core.cache import db, store
+
+
+@pytest.fixture
+def conn(tmp_path):
+    db_path = tmp_path / "cache.db"
+    c = db.open_connection(db_path)
+    db.init_schema(c)
+    yield c
+    c.close()
+
+
+def _entry(folder, name, mtime=100, size=1000, thumb=None):
+    return CachedEntry(
+        folder_path=folder, file_name=name,
+        width=32, height=32, size=size, format="PNG", color_mode="RGBA",
+        mtime_ns=mtime, thumb_blob=thumb,
+        thumb_mtime_ns=mtime if thumb else None,
+    )
+
+
+class TestUpsert:
+    def test_upsert_then_get(self, conn):
+        store.upsert_folder(conn, "d/a", now=1000)
+        store.upsert_entry(conn, _entry("d/a", "x.png", thumb=b"BLOB"))
+        rows = store.get_entries_recursive(conn, "d")
+        assert len(rows) == 1
+        assert rows[0].file_name == "x.png"
+        assert rows[0].thumb_blob == b"BLOB"
+
+    def test_upsert_replaces_existing(self, conn):
+        store.upsert_folder(conn, "d/a", now=1000)
+        store.upsert_entry(conn, _entry("d/a", "x.png", mtime=100))
+        store.upsert_entry(conn, _entry("d/a", "x.png", mtime=200))
+        rows = store.get_entries_recursive(conn, "d")
+        assert len(rows) == 1
+        assert rows[0].mtime_ns == 200
+
+
+class TestRecursiveQuery:
+    def test_returns_root_and_descendants(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.upsert_folder(conn, "d/sub/nested", now=1000)
+        store.upsert_entry(conn, _entry("d", "root.png"))
+        store.upsert_entry(conn, _entry("d/sub", "sub.png"))
+        store.upsert_entry(conn, _entry("d/sub/nested", "nested.png"))
+        rows = store.get_entries_recursive(conn, "d")
+        names = sorted(r.file_name for r in rows)
+        assert names == ["nested.png", "root.png", "sub.png"]
+
+    def test_does_not_match_sibling_with_common_prefix(self, conn):
+        """查询 d 不应命中 d_other（前缀同名但非子目录）。"""
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d_other", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        store.upsert_entry(conn, _entry("d_other", "b.png"))
+        rows = store.get_entries_recursive(conn, "d")
+        assert {r.file_name for r in rows} == {"a.png"}
+
+
+class TestDelete:
+    def test_delete_entries(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        store.upsert_entry(conn, _entry("d", "b.png"))
+        store.delete_entries(conn, [("d", "a.png")])
+        rows = store.get_entries_recursive(conn, "d")
+        assert {r.file_name for r in rows} == {"b.png"}
+
+    def test_delete_folders_under_cascades(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        store.upsert_entry(conn, _entry("d/sub", "b.png"))
+        store.delete_folders_under(conn, "d")
+        rows = store.get_entries_recursive(conn, "d")
+        assert rows == []
+
+
+class TestTouch:
+    def test_touch_folders_under_updates_access_time(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.touch_folders_under(conn, "d", now=2000)
+        rows = list(conn.execute(
+            "SELECT folder_path, last_access_at FROM folders ORDER BY folder_path"
+        ))
+        assert rows == [("d", 2000), ("d/sub", 2000)]
+
+
+class TestEvictLRU:
+    def test_evicts_oldest_when_over_limit(self, conn, monkeypatch):
+        monkeypatch.setattr(db, "MAX_CACHED_FOLDERS", 3)
+        for i, t in enumerate([100, 200, 300, 400]):
+            store.upsert_folder(conn, f"d{i}", now=t)
+        store.evict_lru_if_needed(conn)
+        remaining = sorted(
+            row[0] for row in conn.execute("SELECT folder_path FROM folders")
+        )
+        # 最老的 d0 (last_access_at=100) 被淘汰
+        assert remaining == ["d1", "d2", "d3"]
+
+    def test_cascade_removes_entries(self, conn, monkeypatch):
+        monkeypatch.setattr(db, "MAX_CACHED_FOLDERS", 1)
+        store.upsert_folder(conn, "d0", now=100)
+        store.upsert_folder(conn, "d1", now=200)
+        store.upsert_entry(conn, _entry("d0", "x.png"))
+        store.upsert_entry(conn, _entry("d1", "y.png"))
+        store.evict_lru_if_needed(conn)
+        rows = list(conn.execute("SELECT file_name FROM entries"))
+        assert rows == [("y.png",)]
+
+
+class TestClearAll:
+    def test_clear_all_empties_both_tables(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        store.clear_all(conn)
+        assert list(conn.execute("SELECT * FROM folders")) == []
+        assert list(conn.execute("SELECT * FROM entries")) == []
