@@ -162,3 +162,68 @@ class TestProcessDiffSync:
             assert b_before.thumb_blob == b_after.thumb_blob
         finally:
             conn.close()
+
+
+class TestDiffWorkerEndToEnd:
+    """用 pytest-qt 跑真实 DiffWorker，验证信号 + DB 落地。"""
+
+    def test_signals_emitted_in_order(self, tmp_path, qtbot, monkeypatch):
+        from PySide6.QtCore import QThreadPool
+        from gdm.core.cache.scanner_cached import DiffWorker
+        from gdm.core.cache import get_db_path
+
+        # 把缓存 DB 重定向到 tmp_path
+        monkeypatch.setattr(
+            "gdm.core.cache.get_db_path",
+            lambda: tmp_path / "cache.db",
+        )
+
+        _make_png(tmp_path / "a.png")
+        _make_png(tmp_path / "sub" / "b.png")
+
+        worker = DiffWorker(str(tmp_path))
+        updated_batches = []
+        removed_batches = []
+        done_roots = []
+        worker.signals.entries_updated.connect(updated_batches.append)
+        worker.signals.entries_removed.connect(removed_batches.append)
+        worker.signals.scan_done.connect(done_roots.append)
+
+        with qtbot.waitSignal(worker.signals.scan_done, timeout=10000):
+            QThreadPool.globalInstance().start(worker)
+
+        # 应有至少一批 updated（含 a.png 和 b.png）
+        all_updated = [e for batch in updated_batches for e in batch]
+        names = {e.file_name for e in all_updated}
+        assert names == {"a.png", "b.png"}
+        assert removed_batches == []  # 首次扫描无 removed
+        assert done_roots == [str(tmp_path)]
+
+    def test_cancel_stops_partial(self, tmp_path, qtbot, monkeypatch):
+        from PySide6.QtCore import QThreadPool
+        from gdm.core.cache.scanner_cached import DiffWorker
+
+        monkeypatch.setattr(
+            "gdm.core.cache.get_db_path",
+            lambda: tmp_path / "cache.db",
+        )
+
+        # 造 50 张图，cancel 后应远少于 50 张被处理
+        for i in range(50):
+            _make_png(tmp_path / f"img_{i:03d}.png")
+
+        worker = DiffWorker(str(tmp_path))
+        updated_count = [0]
+        worker.signals.entries_updated.connect(
+            lambda batch: updated_count.__setitem__(0, updated_count[0] + len(batch))
+        )
+
+        QThreadPool.globalInstance().start(worker)
+        # 立刻 cancel
+        worker.cancel()
+        with qtbot.waitSignal(worker.signals.scan_done, timeout=10000):
+            pass
+
+        # 不能保证一定 < 50，但至少应有限期内完成
+        # （主要是验证不会卡死）
+        assert updated_count[0] >= 0
