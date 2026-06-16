@@ -21,12 +21,17 @@ def qapp():
 
 @pytest.fixture
 def mock_scan():
-    """模拟扫描过程，同步调用完成回调以返回空列表。"""
-    with patch("gdm.gui.main_window.MainWindow._start_scan") as mock:
+    """模拟扫描过程和缓存操作。"""
+    with patch("gdm.gui.main_window.MainWindow._start_scan") as mock_scan_obj:
         def sync_start_scan(folder, on_finished):
             on_finished([])
-        mock.side_effect = sync_start_scan
-        yield mock
+        mock_scan_obj.side_effect = sync_start_scan
+        
+        # 模拟缓存读取失败，触发降级路径
+        with patch("gdm.gui.main_window.cache_db.open_connection") as mock_conn:
+            mock_conn.side_effect = Exception("缓存不可用")
+            with patch("gdm.gui.main_window.QThreadPool.globalInstance"):
+                yield mock_scan_obj
 
 
 @pytest.fixture
@@ -68,6 +73,18 @@ def mock_ui_components():
 
         def update_progress(self, current, total):
             pass
+
+        def load_from_cache(self, folder_path, entries):
+            pass
+
+        def apply_entries_updated(self, entries):
+            pass
+
+        def apply_entries_removed(self, paths):
+            pass
+
+        def _entry_to_sprite(self, entry):
+            return MagicMock()
 
     class MockDetailPanel(QWidget):
         """模拟 DetailPanel，具有 update 方法。"""

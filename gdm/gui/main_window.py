@@ -7,7 +7,7 @@ import logging
 import os
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, QThreadPool, Slot
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,6 +18,13 @@ from PySide6.QtWidgets import (
     QSplitter,
     QToolBar,
     QWidget,
+)
+
+from gdm.core.cache import get_db_path
+from gdm.core.cache import db as cache_db
+from gdm.core.cache import store as cache_store
+from gdm.core.cache.scanner_cached import (
+    DiffWorker, normalize_folder,
 )
 
 from gdm.core.config import load_config, save_config
@@ -45,6 +52,7 @@ class MainWindow(QMainWindow):
         self._current_sprites: List[SpriteInfo] = []
         self._scan_pending: Optional[tuple[str, object]] = None  # (folder, on_finished)
         self._selected_folder: Optional[str] = None
+        self._active_diff_worker: Optional[DiffWorker] = None
         self._init_ui()
         self._try_restore_project()
 
@@ -119,6 +127,13 @@ class MainWindow(QMainWindow):
 
         extract_action = QAction("全量解压", self)
         extract_action.triggered.connect(self._open_extract_all)
+
+        clear_cache_act = QAction("清空缩略图缓存", self)
+        clear_cache_act.triggered.connect(self._on_clear_cache)
+
+        tool_menu.addAction(rename_action)
+        tool_menu.addAction(extract_action)
+        tool_menu.addAction(clear_cache_act)
 
         tool_menu.aboutToShow.connect(lambda: self._update_toolbar("工具"))
 
@@ -272,15 +287,69 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
 
     def _on_folder_selected(self, folder_path: str) -> None:
-        """左侧面板选中文件夹回调，后台扫描并加载精灵图。"""
+        """左侧面板选中文件夹回调。
+
+        1) 立即用缓存铺 UI
+        2) 启动后台 DiffWorker 做增量更新
+        """
         self._selected_folder = folder_path
-        self.thumbnail_view.show_progress()
-        self._start_scan(folder_path, on_finished=self._on_tree_scan_finished)
+
+        # 取消上一个 worker
+        if self._active_diff_worker is not None:
+            self._active_diff_worker.cancel()
+            self._active_diff_worker = None
+
+        # 1) 立即用缓存铺 UI
+        norm = normalize_folder(folder_path)
+        try:
+            conn = cache_db.open_connection(get_db_path())
+            try:
+                cache_db.init_schema(conn)
+                cache_store.touch_folders_under(
+                    conn, norm, now=int(__import__("time").time())
+                )
+                entries = cache_store.get_entries_recursive(conn, norm)
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning("读取缓存失败，降级为完整扫描: %s", e)
+            # 降级路径：走原有的同步扫描
+            self.thumbnail_view.show_progress()
+            self._start_scan(folder_path, on_finished=self._on_tree_scan_finished)
+            return
+
+        if entries:
+            self.thumbnail_view.load_from_cache(folder_path, entries)
+            self._current_sprites = [
+                self.thumbnail_view._entry_to_sprite(e) for e in entries
+            ]
+        else:
+            # 首次访问：空 UI + 等 DiffWorker 增量铺设
+            self.thumbnail_view.load_from_cache(folder_path, [])
+            self._current_sprites = []
+
+        # 2) 启动后台 DiffWorker
+        worker = DiffWorker(folder_path)
+        worker.signals.entries_updated.connect(
+            self.thumbnail_view.apply_entries_updated
+        )
+        worker.signals.entries_removed.connect(
+            self.thumbnail_view.apply_entries_removed
+        )
+        worker.signals.scan_done.connect(self._on_diff_scan_done)
+        self._active_diff_worker = worker
+        QThreadPool.globalInstance().start(worker)
 
     def _on_tree_scan_finished(self, sprites) -> None:
         """左侧树点击扫描完成回调（不保存配置）。"""
         self._current_sprites = sprites
         self.thumbnail_view.load(sprites)
+
+    def _on_diff_scan_done(self, root: str) -> None:
+        """DiffWorker 完成后的清理。"""
+        if self._active_diff_worker is not None and \
+           self._active_diff_worker.root == root:
+            self._active_diff_worker = None
 
     def _on_selection_changed(self, sprite: SpriteInfo) -> None:
         """缩略图选中项变化回调，更新详情面板。"""
@@ -356,7 +425,21 @@ class MainWindow(QMainWindow):
         self._save_root_paths()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """关闭窗口前保存根目录列表到配置。"""
+        """退出前异步触发 incremental_vacuum，不阻塞退出。"""
+        try:
+            import threading
+            def _vacuum():
+                try:
+                    conn = cache_db.open_connection(get_db_path())
+                    try:
+                        conn.execute("PRAGMA incremental_vacuum")
+                    finally:
+                        conn.close()
+                except Exception as e:
+                    logger.warning("incremental_vacuum 失败: %s", e)
+            threading.Thread(target=_vacuum, daemon=True).start()
+        except Exception:
+            pass
         self._save_root_paths()
         super().closeEvent(event)
 
@@ -417,3 +500,25 @@ class MainWindow(QMainWindow):
         self.toolbar.clear()
         for action in self._toolbar_actions.get(menu_name, []):
             self.toolbar.addAction(action)
+
+    def _on_clear_cache(self) -> None:
+        """清空所有缩略图缓存（DB + VACUUM）。"""
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "清空缓存",
+            "确定要清空所有缩略图缓存吗？\n下次访问目录时需要重新扫描。",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            conn = cache_db.open_connection(get_db_path())
+            try:
+                cache_db.init_schema(conn)
+                cache_store.clear_all(conn)
+                conn.execute("VACUUM")
+            finally:
+                conn.close()
+            QMessageBox.information(self, "完成", "缓存已清空。")
+        except Exception as e:
+            logger.warning("清空缓存失败: %s", e)
+            QMessageBox.warning(self, "失败", f"清空缓存失败: {e}")
