@@ -29,6 +29,7 @@ class TestSupportedExtensions:
         assert ".bz2" in SUPPORTED_ARCHIVE_EXTENSIONS
         assert ".xz" in SUPPORTED_ARCHIVE_EXTENSIONS
         assert ".tgz" in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert ".rar" in SUPPORTED_ARCHIVE_EXTENSIONS
 
 
 class TestFindArchives:
@@ -162,7 +163,7 @@ class TestExtractAll:
         with zipfile.ZipFile(d / "b.zip", "w") as zf:
             zf.writestr("b.txt", "b")
 
-        success, fail, failed_list = extract_all(str(d))
+        success, fail, failed_list, rar_list = extract_all(str(d))
 
         assert success == 2
         assert fail == 0
@@ -180,13 +181,13 @@ class TestExtractAll:
             zf.write(inner, "inner.zip")
         os.remove(inner)
 
-        success, fail, _ = extract_all(str(d))
+        success, fail, _, _ = extract_all(str(d))
 
         assert success == 2  # outer + inner
         assert fail == 0
 
     def test_extract_all_no_archives(self, tmp_path):
-        success, fail, _ = extract_all(str(tmp_path))
+        success, fail, _, _ = extract_all(str(tmp_path))
         assert success == 0
         assert fail == 0
 
@@ -202,8 +203,47 @@ class TestExtractAll:
         def cb(current, total, filename):
             calls.append((current, total, filename))
 
-        success, fail, _ = extract_all(str(d), progress_callback=cb)
+        success, fail, _, _ = extract_all(str(d), progress_callback=cb)
 
         assert success == 2
         assert len(calls) >= 2
         assert calls[-1][1] >= 2
+
+
+class TestRarDetection:
+    """测试 RAR 文件检测与跳过。"""
+
+    def test_find_archives_includes_rar(self, tmp_path):
+        """find_archives 应检测 .rar 文件。"""
+        (tmp_path / "test.zip").touch()
+        (tmp_path / "test.rar").touch()
+
+        archives = find_archives(str(tmp_path))
+        names = [os.path.basename(a) for a in archives]
+        assert "test.rar" in names
+        assert "test.zip" in names
+
+    def test_extract_all_skips_rar(self, tmp_path):
+        """extract_all 应跳过 .rar 文件并返回其路径。"""
+        # 创建一个真正的 zip（含单个文件）和一个 .rar 占位
+        with zipfile.ZipFile(tmp_path / "test.zip", "w") as zf:
+            zf.writestr("hello.txt", "hello")
+
+        (tmp_path / "test.rar").touch()
+
+        success, fail, failed, rar_list = extract_all(str(tmp_path))
+
+        assert success == 1  # zip 解压成功
+        assert fail == 0
+        assert len(rar_list) == 1
+        assert "test.rar" in rar_list[0]
+
+    def test_extract_all_rar_dedup(self, tmp_path):
+        """RAR 文件在同一目录多次扫描不会重复。"""
+        (tmp_path / "test.rar").touch()
+
+        success, fail, failed, rar_list = extract_all(str(tmp_path))
+
+        assert success == 0
+        assert fail == 0
+        assert len(rar_list) == 1
