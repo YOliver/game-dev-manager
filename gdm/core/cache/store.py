@@ -12,7 +12,7 @@ from gdm.core.cache import db
 
 
 def upsert_folder(conn: sqlite3.Connection, folder_path: str, now: int) -> None:
-    """插入或刷新 folders 行。"""
+    """插入或刷新 folders 行。调用方负责 commit。"""
     conn.execute(
         """
         INSERT INTO folders(folder_path, last_scan_at, last_access_at)
@@ -23,7 +23,6 @@ def upsert_folder(conn: sqlite3.Connection, folder_path: str, now: int) -> None:
         """,
         (folder_path, now, now),
     )
-    conn.commit()
 
 
 def touch_folders_under(conn: sqlite3.Connection, root: str, now: int) -> None:
@@ -58,6 +57,7 @@ def mark_scan_done(
 
 
 def upsert_entry(conn: sqlite3.Connection, e: CachedEntry) -> None:
+    """插入或刷新 entries 行。调用方负责 commit。"""
     conn.execute(
         """
         INSERT INTO entries(
@@ -82,7 +82,6 @@ def upsert_entry(conn: sqlite3.Connection, e: CachedEntry) -> None:
             e.thumb_blob, e.thumb_mtime_ns,
         ),
     )
-    conn.commit()
 
 
 def get_entries_recursive(
@@ -117,11 +116,11 @@ def get_entries_recursive(
 def delete_entries(
     conn: sqlite3.Connection, keys: Iterable[Tuple[str, str]]
 ) -> None:
+    """删除 entries 行。调用方负责 commit。"""
     conn.executemany(
         "DELETE FROM entries WHERE folder_path = ? AND file_name = ?",
         list(keys),
     )
-    conn.commit()
 
 
 def delete_folders_under(conn: sqlite3.Connection, root: str) -> None:
