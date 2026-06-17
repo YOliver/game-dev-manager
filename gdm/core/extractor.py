@@ -1,6 +1,6 @@
 """压缩包解压模块。
 
-支持 zip, tar, gz, bz2, xz 格式的递归解压。
+支持 zip, tar, gz, bz2, xz, rar（仅检测）格式的递归解压。
 """
 
 import gzip
@@ -15,7 +15,7 @@ from typing import Callable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_ARCHIVE_EXTENSIONS = {".zip", ".tar", ".gz", ".bz2", ".xz", ".tgz"}
+SUPPORTED_ARCHIVE_EXTENSIONS = {".zip", ".tar", ".gz", ".bz2", ".xz", ".tgz", ".rar"}
 
 
 def find_archives(directory: str) -> List[str]:
@@ -136,23 +136,32 @@ def extract_archive(archive_path: str) -> str:
 def extract_all(
     directory: str,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
-) -> Tuple[int, int, List[str]]:
+) -> Tuple[int, int, List[str], List[str]]:
     """递归解压目录下所有压缩包（含嵌套）。
 
-    返回 (成功数, 失败数, 失败文件路径列表)。
+    返回 (成功数, 失败数, 失败文件路径列表, rar 文件路径列表)。
     """
     success_count = 0
     fail_count = 0
     failed_paths: List[str] = []
+    all_rar_files: set[str] = set()
 
     while True:
         archives = find_archives(directory)
         if not archives:
             break
 
-        total_count = len(archives)
+        # 分离 RAR 文件（用 set 避免跨轮重复）
+        rar_files = [a for a in archives if a.lower().endswith(".rar")]
+        others = [a for a in archives if not a.lower().endswith(".rar")]
+        all_rar_files.update(rar_files)
+
+        if not others:
+            break
+
+        total_count = len(others)
         any_success = False
-        for archive_path in archives:
+        for archive_path in others:
             try:
                 extract_archive(archive_path)
                 success_count += 1
@@ -169,4 +178,4 @@ def extract_all(
         if not any_success:
             break  # all failed, avoid infinite loop
 
-    return success_count, fail_count, failed_paths
+    return success_count, fail_count, failed_paths, sorted(all_rar_files)
