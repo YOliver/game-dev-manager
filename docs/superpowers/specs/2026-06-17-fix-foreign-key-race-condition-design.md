@@ -133,9 +133,16 @@ if batch:
 
 ### 3. 测试更新
 
-受影响的测试文件：
-- `tests/cache/test_store.py`（如有）：验证移除自提交后单个函数行为不变
-- `tests/cache/test_scanner_cached.py`：现有测试应全部通过，因为 `process_diff_sync` 现在负责提交
+**`tests/cache/test_store.py`（存在，10 个测试）：** 直接调用 `upsert_folder`、`upsert_entry`、`delete_entries`。经验证，Python sqlite3 默认 legacy 模式下同一连接内未提交的 DML 对后续 SELECT 可见，因此这些测试应继续通过。`evict_lru_if_needed` 保留自提交，会顺带提交前面堆积的 DML。实现后需跑全量回归确认。
+
+**`tests/cache/test_scanner_cached.py`（14 个测试）：** 现有测试全部通过 `process_diff_sync` 间接调用，现在该函数负责提交，对测试透明。无需修改测试代码。
+
+**验证步骤：**
+```bash
+cd G:/UGit/game-dev-manager
+python -m pytest tests/cache/test_store.py tests/cache/test_scanner_cached.py -v
+# Expected: 24 passed
+```
 
 ---
 
