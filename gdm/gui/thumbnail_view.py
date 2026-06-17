@@ -9,6 +9,7 @@
 
 import os
 import re
+import sqlite3
 from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal
@@ -332,9 +333,30 @@ class ThumbnailView(QWidget):
         self._prefix_combo.currentTextChanged.connect(self._on_group_changed)
         self._main_layout.addWidget(self._prefix_combo)
 
+    def set_current_folder(self, folder: str) -> None:
+        """记录当前选中的目录路径，供 _update_count() 查询 DB。"""
+        self._current_folder = folder
+
     def _update_count(self) -> None:
-        """更新图片计数显示。"""
-        self._count_label.setText(str(len(self._sprites)))
+        """从 DB 读取当前目录的图片总数并更新标签。"""
+        if not getattr(self, "_current_folder", None):
+            return
+        from gdm.core.cache.db import open_connection, get_db_path
+        from gdm.core.cache.scanner_cached import normalize_folder
+        try:
+            conn = open_connection(get_db_path())
+            try:
+                norm = normalize_folder(self._current_folder)
+                row = conn.execute(
+                    "SELECT COALESCE(SUM(entry_count), 0) FROM folders "
+                    "WHERE folder_path = ? OR folder_path LIKE ?",
+                    (norm, norm + "/%"),
+                ).fetchone()
+                self._count_label.setText(str(row[0]) if row else "0")
+            finally:
+                conn.close()
+        except sqlite3.DatabaseError:
+            pass
 
     @staticmethod
     def _extract_prefix(file_name: str) -> str:
@@ -542,8 +564,6 @@ class ThumbnailView(QWidget):
             if pix is not None:
                 item.setIcon(QIcon(pix))
                 self._thumbnails[sprite.file_path] = pix
-
-        self._update_count()
 
     def apply_entries_removed(self, keys: List[Tuple[str, str]]) -> None:
         """根据 (folder_path, file_name) 列表移除项。"""
