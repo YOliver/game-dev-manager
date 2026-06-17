@@ -283,6 +283,14 @@ class ThumbnailView(QWidget):
         progress_layout.addWidget(self._progress_detail)
         progress_layout.addStretch()
 
+        # 图片计数标签
+        self._count_label = QLabel("0")
+        self._count_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._count_label.setStyleSheet(
+            "color: #999; font-size: 11px; padding: 2px 8px;"
+        )
+        self._main_layout.addWidget(self._count_label)
+
         self._main_layout.addWidget(self._progress_widget)
 
         # 防抖定时器：窗口连续 resize 时延迟触发布局重排
@@ -315,6 +323,10 @@ class ThumbnailView(QWidget):
         self._list_widget.itemSelectionChanged.connect(self._on_selection_changed)
 
         self._main_layout.addWidget(self._list_widget)
+
+    def _update_count(self) -> None:
+        """更新图片计数显示。"""
+        self._count_label.setText(str(len(self._sprites)))
 
     def _relayout(self) -> None:
         """根据当前视图宽度重新计算并应用网格布局。
