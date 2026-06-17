@@ -137,6 +137,7 @@ def process_diff_sync(
 
     if removed:
         store.delete_entries(conn, removed)
+        conn.commit()
         if on_removed:
             on_removed(list(removed))
 
@@ -164,12 +165,15 @@ def process_diff_sync(
         touched_folders.add(snap.folder_path)
         batch.append(entry)
         if len(batch) >= db.BATCH_EMIT_SIZE:
+            conn.commit()
             if on_batch_updated:
                 on_batch_updated(list(batch))
             batch.clear()
 
-    if batch and on_batch_updated:
-        on_batch_updated(list(batch))
+    if batch:
+        conn.commit()
+        if on_batch_updated:
+            on_batch_updated(list(batch))
 
     # 标记所有涉及的叶子目录扫描完成
     all_folders = (
