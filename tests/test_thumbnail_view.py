@@ -150,3 +150,8 @@ class TestExtractPrefix:
     def test_extract_multi_underscore(self):
         from gdm.gui.thumbnail_view import ThumbnailView
         assert ThumbnailView._extract_prefix("player_run_left_001.png") == "player_run_left"
+
+    def test_extract_hyphen_separator(self):
+        from gdm.gui.thumbnail_view import ThumbnailView
+        assert ThumbnailView._extract_prefix("character-idle-001.png") == "character-idle"
+        assert ThumbnailView._extract_prefix("enemy-boss-02.png") == "enemy-boss"

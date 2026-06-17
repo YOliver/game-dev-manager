@@ -343,7 +343,7 @@ class ThumbnailView(QWidget):
         匹配最后一个 '_数字' 之前的部分，无匹配返回 '其他'。
         """
         stem = os.path.splitext(file_name)[0]
-        m = re.match(r"^(.*)_\d+", stem)
+        m = re.match(r"^(.*)[_-]\d+", stem)
         return m.group(1) if m else "其他"
 
     def _build_groups(self) -> None:
