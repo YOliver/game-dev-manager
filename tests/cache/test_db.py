@@ -53,6 +53,44 @@ class TestInitSchema:
             conn.close()
 
 
+class TestMigration:
+    """测试幂等迁移：旧 schema 无 entry_count 时自动 ADD COLUMN。"""
+
+    def test_migration_adds_entry_count(self, tmp_path):
+        """用旧 schema 建表 + 写数据，再 init_schema 应补上 entry_count。"""
+        db_path = tmp_path / "cache.db"
+        conn = db.open_connection(db_path)
+        try:
+            # 用旧 DDL 建表（无 entry_count）
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS folders (
+                    folder_path    TEXT PRIMARY KEY,
+                    last_scan_at   INTEGER NOT NULL,
+                    last_access_at INTEGER NOT NULL
+                )
+            """)
+            conn.execute(
+                "INSERT INTO folders(folder_path, last_scan_at, last_access_at) "
+                "VALUES (?, ?, ?)",
+                ("d/a", 100, 100),
+            )
+            conn.commit()
+
+            # 幂等迁移
+            db.init_schema(conn)
+
+            # 验证列存在且默认值正确
+            rows = conn.execute(
+                "SELECT folder_path, entry_count FROM folders"
+            ).fetchall()
+            assert rows == [("d/a", 0)]
+
+            # 重复调用不抛异常
+            db.init_schema(conn)
+        finally:
+            conn.close()
+
+
 class TestIntegrityCheck:
     def test_passes_on_healthy_db(self, tmp_path):
         db_path = tmp_path / "cache.db"

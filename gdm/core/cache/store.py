@@ -164,3 +164,17 @@ def clear_all(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM entries")
     conn.execute("DELETE FROM folders")
     conn.commit()
+
+
+def update_folder_counts(conn: sqlite3.Connection, root: str) -> None:
+    """统计 root 下各目录的 entry 数量并更新 folders.entry_count。"""
+    conn.execute("""
+        UPDATE folders
+        SET entry_count = (
+            SELECT COUNT(*)
+            FROM entries
+            WHERE entries.folder_path = folders.folder_path
+        )
+        WHERE folder_path = ? OR folder_path LIKE ?
+    """, (root, root + "/%"))
+    conn.commit()

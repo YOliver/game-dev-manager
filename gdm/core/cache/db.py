@@ -24,7 +24,8 @@ _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS folders (
     folder_path    TEXT PRIMARY KEY,
     last_scan_at   INTEGER NOT NULL,
-    last_access_at INTEGER NOT NULL
+    last_access_at INTEGER NOT NULL,
+    entry_count    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS entries (
@@ -69,6 +70,13 @@ def open_connection(db_path: Optional[Path]) -> sqlite3.Connection:
 def init_schema(conn: sqlite3.Connection) -> None:
     """创建表与索引（幂等）。"""
     conn.executescript(_SCHEMA_SQL)
+    # 幂等迁移：旧 DB 无 entry_count 列时新增
+    try:
+        conn.execute(
+            "ALTER TABLE folders ADD COLUMN entry_count INTEGER NOT NULL DEFAULT 0"
+        )
+    except sqlite3.OperationalError:
+        pass  # 列已存在
     conn.commit()
 
 

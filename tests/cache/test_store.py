@@ -124,3 +124,49 @@ class TestClearAll:
         store.clear_all(conn)
         assert list(conn.execute("SELECT * FROM folders")) == []
         assert list(conn.execute("SELECT * FROM entries")) == []
+
+
+class TestUpdateFolderCounts:
+    def test_counts_root_and_subdirs(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.upsert_folder(conn, "d/sub/nested", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        store.upsert_entry(conn, _entry("d", "b.png"))
+        store.upsert_entry(conn, _entry("d/sub", "c.png"))
+        store.upsert_entry(conn, _entry("d/sub/nested", "d.png"))
+        conn.commit()
+
+        store.update_folder_counts(conn, "d")
+
+        rows = {
+            r[0]: r[1]
+            for r in conn.execute(
+                "SELECT folder_path, entry_count FROM folders"
+            ).fetchall()
+        }
+        assert rows == {"d": 2, "d/sub": 1, "d/sub/nested": 1}
+
+    def test_zero_count_when_no_entries(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        conn.commit()
+
+        store.update_folder_counts(conn, "d")
+
+        (count,) = conn.execute(
+            "SELECT entry_count FROM folders WHERE folder_path = ?", ("d",)
+        ).fetchone()
+        assert count == 0
+
+    def test_unrelated_folder_not_affected(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "other", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        conn.commit()
+
+        store.update_folder_counts(conn, "d")
+
+        (other_count,) = conn.execute(
+            "SELECT entry_count FROM folders WHERE folder_path = ?", ("other",)
+        ).fetchone()
+        assert other_count == 0  # other 不受影响
