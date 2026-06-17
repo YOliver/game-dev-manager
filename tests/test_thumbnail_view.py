@@ -127,3 +127,26 @@ def test_count_label_after_remove(thumbnail_view, sample_sprites):
     ]
     thumbnail_view.apply_entries_removed(keys)
     assert thumbnail_view._count_label.text() == str(len(sample_sprites) - 2)
+
+
+# ---- 前缀提取测试 ----
+
+
+class TestExtractPrefix:
+    """测试 _extract_prefix() 前缀提取。"""
+
+    def test_extract_with_number_suffix(self):
+        from gdm.gui.thumbnail_view import ThumbnailView
+        assert ThumbnailView._extract_prefix("character_idle_001.png") == "character_idle"
+        assert ThumbnailView._extract_prefix("enemy_boss_02.png") == "enemy_boss"
+        assert ThumbnailView._extract_prefix("sprite_1.png") == "sprite"
+
+    def test_extract_no_number_returns_other(self):
+        from gdm.gui.thumbnail_view import ThumbnailView
+        assert ThumbnailView._extract_prefix("icon.png") == "其他"
+        assert ThumbnailView._extract_prefix("UI_button.png") == "其他"
+        assert ThumbnailView._extract_prefix("bg.png") == "其他"
+
+    def test_extract_multi_underscore(self):
+        from gdm.gui.thumbnail_view import ThumbnailView
+        assert ThumbnailView._extract_prefix("player_run_left_001.png") == "player_run_left"
