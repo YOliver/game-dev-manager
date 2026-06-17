@@ -86,6 +86,12 @@ def mock_ui_components():
         def _entry_to_sprite(self, entry):
             return MagicMock()
 
+        def set_current_folder(self, folder_path):
+            pass
+
+        def _update_count(self):
+            pass
+
     class MockDetailPanel(QWidget):
         """模拟 DetailPanel，具有 update 方法。"""
 

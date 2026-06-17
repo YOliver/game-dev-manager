@@ -289,6 +289,7 @@ class MainWindow(QMainWindow):
         2) 启动后台 DiffWorker 做增量更新
         """
         self._selected_folder = folder_path
+        self.thumbnail_view.set_current_folder(folder_path)
 
         # 取消上一个 worker
         if self._active_diff_worker is not None:
@@ -346,6 +347,7 @@ class MainWindow(QMainWindow):
         if self._active_diff_worker is not None and \
            self._active_diff_worker.root == root:
             self._active_diff_worker = None
+        self.thumbnail_view._update_count()
 
     def _on_selection_changed(self, sprite: SpriteInfo) -> None:
         """缩略图选中项变化回调，更新详情面板。"""
