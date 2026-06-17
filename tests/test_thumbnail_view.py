@@ -1,7 +1,10 @@
-"""测试缩略图网格自适应排列。"""
+"""测试缩略图网格自适应排列和计数标签。"""
 
+import os
 import pytest
 from PySide6.QtWidgets import QApplication
+
+from gdm.core.models import SpriteInfo
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -78,3 +81,49 @@ def test_calculate_grid_zero_width():
     grid_w_neg, cols_neg = ThumbnailView._calculate_grid(-10)
     assert grid_w_neg == 160
     assert cols_neg == 1
+
+
+# ---- 计数标签测试 ----
+
+
+@pytest.fixture
+def thumbnail_view(qtbot):
+    from gdm.gui.thumbnail_view import ThumbnailView
+    view = ThumbnailView()
+    qtbot.addWidget(view)
+    return view
+
+
+@pytest.fixture
+def sample_sprites():
+    return [
+        SpriteInfo(
+            file_path=os.path.join("/test", f"sprite_{i:03d}.png"),
+            file_name=f"sprite_{i:03d}.png",
+            width=64, height=64,
+            file_size=1024, format="PNG", color_mode="RGBA",
+        )
+        for i in range(5)
+    ]
+
+
+def test_count_label_initial(thumbnail_view):
+    """初始状态计数应为 0。"""
+    assert thumbnail_view._count_label.text() == "0"
+
+
+def test_count_label_after_load(thumbnail_view, sample_sprites):
+    """加载精灵图后计数应正确。"""
+    thumbnail_view.load(sample_sprites)
+    assert thumbnail_view._count_label.text() == str(len(sample_sprites))
+
+
+def test_count_label_after_remove(thumbnail_view, sample_sprites):
+    """删除项后计数应减少。"""
+    thumbnail_view.load(sample_sprites)
+    keys = [
+        (os.path.dirname(s.file_path), s.file_name)
+        for s in sample_sprites[:2]
+    ]
+    thumbnail_view.apply_entries_removed(keys)
+    assert thumbnail_view._count_label.text() == str(len(sample_sprites) - 2)
