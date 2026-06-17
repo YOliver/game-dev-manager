@@ -362,6 +362,7 @@ class ThumbnailView(QWidget):
         self._progress_widget.setVisible(True)
         self._progress_bar.setValue(0)
         self._progress_detail.setText("")
+        self._count_label.setVisible(False)
 
     def update_progress(self, current: int, total: int) -> None:
         """更新扫描进度条和详情文字。
@@ -384,6 +385,7 @@ class ThumbnailView(QWidget):
         # 扫描完成，从进度界面切换回缩略图网格
         self._progress_widget.setVisible(False)
         self._list_widget.setVisible(True)
+        self._count_label.setVisible(True)
 
         self._sprites = list(sprites)
         self._items.clear()
@@ -406,6 +408,7 @@ class ThumbnailView(QWidget):
 
         # 根据当前窗口宽度进行自适应排列
         self._relayout()
+        self._update_count()
 
     def _entry_to_sprite(self, entry: CachedEntry) -> SpriteInfo:
         """从 CachedEntry 重建 SpriteInfo，UI 下游消费方无需感知。"""
@@ -440,6 +443,7 @@ class ThumbnailView(QWidget):
         """
         self._progress_widget.setVisible(False)
         self._list_widget.setVisible(True)
+        self._count_label.setVisible(True)
 
         sprites = [self._entry_to_sprite(e) for e in entries]
         self._sprites = list(sprites)
@@ -460,6 +464,7 @@ class ThumbnailView(QWidget):
             # 否则保持空图标，留待 apply_entries_updated 或异步 worker 补齐
 
         self._relayout()
+        self._update_count()
 
     def apply_entries_updated(self, entries: List[CachedEntry]) -> None:
         """后台 diff 完成一批后增量更新 UI。"""
@@ -482,6 +487,8 @@ class ThumbnailView(QWidget):
                 item.setIcon(QIcon(pix))
                 self._thumbnails[sprite.file_path] = pix
 
+        self._update_count()
+
     def apply_entries_removed(self, keys: List[Tuple[str, str]]) -> None:
         """根据 (folder_path, file_name) 列表移除项。"""
         for folder, name in keys:
@@ -495,6 +502,8 @@ class ThumbnailView(QWidget):
             # 同步从 _sprites / _thumbnails 移除
             self._sprites = [s for s in self._sprites if s.file_path != full_path]
             self._thumbnails.pop(full_path, None)
+
+        self._update_count()
 
     def _load_thumbnail_async(self, sprite: SpriteInfo) -> None:
         """异步加载单个精灵图的缩略图。
