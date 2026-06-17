@@ -478,7 +478,7 @@ class MainWindow(QMainWindow):
             progress.setValue(current)
             progress.setLabelText(f"正在解压：{filename}\n已完成：{current}/{total}")
 
-        success, fail, failed_list = extract_all(directory, progress_callback=update_progress)
+        success, fail, failed_list, rar_list = extract_all(directory, progress_callback=update_progress)
         progress.close()
 
         msg = f"解压完成：成功 {success} 个，失败 {fail} 个"
@@ -486,6 +486,11 @@ class MainWindow(QMainWindow):
             msg += "\n\n失败文件：\n" + "\n".join(failed_list[:10])
             if len(failed_list) > 10:
                 msg += f"\n... 共 {len(failed_list)} 个"
+        if rar_list:
+            msg += "\n\n⚠ 以下 RAR 文件无法自动解压，请手动处理：\n"
+            msg += "\n".join(rar_list[:10])
+            if len(rar_list) > 10:
+                msg += f"\n... 共 {len(rar_list)} 个"
 
         QMessageBox.information(self, "全量解压", msg)
 
