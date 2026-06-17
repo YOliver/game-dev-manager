@@ -8,6 +8,7 @@
 """
 
 import os
+import re
 from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QModelIndex, QObject, QRect, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal
@@ -15,6 +16,7 @@ from PySide6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QComboBox,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -328,8 +330,18 @@ class ThumbnailView(QWidget):
         """更新图片计数显示。"""
         self._count_label.setText(str(len(self._sprites)))
 
+    @staticmethod
+    def _extract_prefix(file_name: str) -> str:
+        """从文件名提取分组前缀。
+
+        匹配最后一个 '_数字' 之前的部分，无匹配返回 '其他'。
+        """
+        stem = os.path.splitext(file_name)[0]
+        m = re.match(r"^(.*)_\d+", stem)
+        return m.group(1) if m else "其他"
+
     def _relayout(self) -> None:
-        """根据当前视图宽度重新计算并应用网格布局。
+        """根据当前视图宽度重新计算并应用网���布局。
 
         计算最优网格宽度，更新 delegate，保留滚动位置。
         """
