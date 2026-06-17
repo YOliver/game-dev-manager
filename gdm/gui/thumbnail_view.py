@@ -326,6 +326,12 @@ class ThumbnailView(QWidget):
 
         self._main_layout.addWidget(self._list_widget)
 
+        # 分组筛选栏
+        self._prefix_combo = QComboBox()
+        self._prefix_combo.addItem("全部")
+        self._prefix_combo.currentTextChanged.connect(self._on_group_changed)
+        self._main_layout.addWidget(self._prefix_combo)
+
     def _update_count(self) -> None:
         """更新图片计数显示。"""
         self._count_label.setText(str(len(self._sprites)))
@@ -339,6 +345,39 @@ class ThumbnailView(QWidget):
         stem = os.path.splitext(file_name)[0]
         m = re.match(r"^(.*)_\d+", stem)
         return m.group(1) if m else "其他"
+
+    def _build_groups(self) -> None:
+        """从当前精灵图列表提取分组并填充下拉框。"""
+        groups = sorted(set(
+            self._extract_prefix(s.file_name) for s in self._sprites
+        ))
+        current = self._prefix_combo.currentText()
+        self._prefix_combo.blockSignals(True)
+        self._prefix_combo.clear()
+        self._prefix_combo.addItem("全部")
+        self._prefix_combo.addItems(groups)
+        if current in groups or current == "全部":
+            self._prefix_combo.setCurrentText(current)
+        else:
+            self._prefix_combo.setCurrentText("全部")
+        self._prefix_combo.blockSignals(False)
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        """根据当前选中的分组隐藏/显示列表项。"""
+        group = self._prefix_combo.currentText()
+        for sprite in self._sprites:
+            item = self._items.get(sprite.file_path)
+            if item is None:
+                continue
+            if group == "全部":
+                item.setHidden(False)
+            else:
+                item.setHidden(self._extract_prefix(sprite.file_name) != group)
+
+    def _on_group_changed(self, _text: str) -> None:
+        """分组切换回调。"""
+        self._apply_filter()
 
     def _relayout(self) -> None:
         """根据当前视图宽度重新计算并应用网���布局。
