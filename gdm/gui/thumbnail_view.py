@@ -414,6 +414,7 @@ class ThumbnailView(QWidget):
         self._progress_bar.setValue(0)
         self._progress_detail.setText("")
         self._count_label.setVisible(False)
+        self._prefix_combo.setVisible(False)
 
     def update_progress(self, current: int, total: int) -> None:
         """更新扫描进度条和详情文字。
@@ -437,6 +438,7 @@ class ThumbnailView(QWidget):
         self._progress_widget.setVisible(False)
         self._list_widget.setVisible(True)
         self._count_label.setVisible(True)
+        self._prefix_combo.setVisible(True)
 
         self._sprites = list(sprites)
         self._items.clear()
@@ -460,6 +462,7 @@ class ThumbnailView(QWidget):
         # 根据当前窗口宽度进行自适应排列
         self._relayout()
         self._update_count()
+        self._build_groups()
 
     def _entry_to_sprite(self, entry: CachedEntry) -> SpriteInfo:
         """从 CachedEntry 重建 SpriteInfo，UI 下游消费方无需感知。"""
@@ -495,6 +498,7 @@ class ThumbnailView(QWidget):
         self._progress_widget.setVisible(False)
         self._list_widget.setVisible(True)
         self._count_label.setVisible(True)
+        self._prefix_combo.setVisible(True)
 
         sprites = [self._entry_to_sprite(e) for e in entries]
         self._sprites = list(sprites)
@@ -516,6 +520,7 @@ class ThumbnailView(QWidget):
 
         self._relayout()
         self._update_count()
+        self._build_groups()
 
     def apply_entries_updated(self, entries: List[CachedEntry]) -> None:
         """后台 diff 完成一批后增量更新 UI。"""
