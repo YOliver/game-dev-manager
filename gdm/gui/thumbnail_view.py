@@ -341,7 +341,8 @@ class ThumbnailView(QWidget):
         """从 DB 读取当前目录的图片总数并更新标签。"""
         if not getattr(self, "_current_folder", None):
             return
-        from gdm.core.cache.db import open_connection, get_db_path
+        from gdm.core.cache.db import open_connection
+        from gdm.core.cache import get_db_path
         from gdm.core.cache.scanner_cached import normalize_folder
         try:
             conn = open_connection(get_db_path())
