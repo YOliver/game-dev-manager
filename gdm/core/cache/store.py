@@ -5,7 +5,7 @@
 """
 
 import sqlite3
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from gdm.core.cache import CachedEntry
 from gdm.core.cache import db
@@ -163,6 +163,55 @@ def evict_lru_if_needed(conn: sqlite3.Connection) -> None:
 def clear_all(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM entries")
     conn.execute("DELETE FROM folders")
+    conn.commit()
+
+
+def _norm_path_parent(path: str) -> Optional[str]:
+    """返回标准化路径的父目录，根目录返回 None。
+
+    >>> _norm_path_parent("d/sub")
+    'd'
+    >>> _norm_path_parent("d")
+    None
+    """
+    idx = path.rfind("/")
+    if idx <= 0:
+        return None
+    return path[:idx]
+
+
+def _ensure_ancestor_folders(conn: sqlite3.Connection, root: str) -> None:
+    """为 root 下所有叶子目录的缺失祖先目录补充 folders 行。"""
+    norm_root = root.rstrip("/")
+
+    # 收集 root 下所有已有 folder_path
+    existing = {
+        r[0] for r in conn.execute(
+            "SELECT folder_path FROM folders WHERE folder_path = ? OR folder_path LIKE ?",
+            (norm_root, norm_root + "/%"),
+        ).fetchall()
+    }
+
+    # 计算所有需要存在的祖先路径
+    ancestors = set()
+    for path in existing:
+        while True:
+            parent = _norm_path_parent(path)
+            if parent is None or parent in ancestors or parent in existing:
+                break
+            if not parent.startswith(norm_root):
+                break
+            ancestors.add(parent)
+            path = parent
+
+    if not ancestors:
+        return
+
+    # 批量插入缺失的祖先行
+    conn.executemany(
+        "INSERT OR IGNORE INTO folders (folder_path, last_scan_at, last_access_at) VALUES (?, 0, 0)",
+        [(a,) for a in sorted(ancestors)],
+    )
     conn.commit()
 
 
