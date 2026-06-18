@@ -349,9 +349,8 @@ class ThumbnailView(QWidget):
             try:
                 norm = normalize_folder(self._current_folder)
                 row = conn.execute(
-                    "SELECT COALESCE(SUM(entry_count), 0) FROM folders "
-                    "WHERE folder_path = ? OR folder_path LIKE ?",
-                    (norm, norm + "/%"),
+                    "SELECT entry_count FROM folders WHERE folder_path = ?",
+                    (norm,),
                 ).fetchone()
                 self._count_label.setText(str(row[0]) if row else "0")
             finally:
