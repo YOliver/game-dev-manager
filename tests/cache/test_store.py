@@ -145,7 +145,7 @@ class TestUpdateFolderCounts:
                 "SELECT folder_path, entry_count FROM folders"
             ).fetchall()
         }
-        assert rows == {"d": 2, "d/sub": 1, "d/sub/nested": 1}
+        assert rows == {"d": 4, "d/sub": 2, "d/sub/nested": 1}
 
     def test_zero_count_when_no_entries(self, conn):
         store.upsert_folder(conn, "d", now=1000)
