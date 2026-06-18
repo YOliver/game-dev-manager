@@ -170,3 +170,25 @@ class TestUpdateFolderCounts:
             "SELECT entry_count FROM folders WHERE folder_path = ?", ("other",)
         ).fetchone()
         assert other_count == 0  # other 不受影响
+
+    def test_ancestor_folders_created(self, conn):
+        """中间祖先目录没有直接文件时，_ensure_ancestor_folders 自动补行。"""
+        # 只创建最深层的叶子目录
+        store.upsert_folder(conn, "d/sub/deep", now=1000)
+        store.upsert_entry(conn, _entry("d/sub/deep", "x.png"))
+        conn.commit()
+
+        store.update_folder_counts(conn, "d")
+
+        # d 和 d/sub 应被自动补行
+        rows = {
+            r[0]: r[1]
+            for r in conn.execute(
+                "SELECT folder_path, entry_count FROM folders ORDER BY folder_path"
+            ).fetchall()
+        }
+        assert rows == {
+            "d": 1,
+            "d/sub": 1,
+            "d/sub/deep": 1,
+        }
