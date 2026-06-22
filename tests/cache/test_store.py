@@ -28,7 +28,7 @@ class TestUpsert:
     def test_upsert_then_get(self, conn):
         store.upsert_folder(conn, "d/a", now=1000)
         store.upsert_entry(conn, _entry("d/a", "x.png", thumb=b"BLOB"))
-        rows = store.get_entries_recursive(conn, "d")
+        rows = store.get_entries(conn, "d", recursive=True)
         assert len(rows) == 1
         assert rows[0].file_name == "x.png"
         assert rows[0].thumb_blob == b"BLOB"
@@ -37,7 +37,7 @@ class TestUpsert:
         store.upsert_folder(conn, "d/a", now=1000)
         store.upsert_entry(conn, _entry("d/a", "x.png", mtime=100))
         store.upsert_entry(conn, _entry("d/a", "x.png", mtime=200))
-        rows = store.get_entries_recursive(conn, "d")
+        rows = store.get_entries(conn, "d", recursive=True)
         assert len(rows) == 1
         assert rows[0].mtime_ns == 200
 
@@ -50,7 +50,7 @@ class TestRecursiveQuery:
         store.upsert_entry(conn, _entry("d", "root.png"))
         store.upsert_entry(conn, _entry("d/sub", "sub.png"))
         store.upsert_entry(conn, _entry("d/sub/nested", "nested.png"))
-        rows = store.get_entries_recursive(conn, "d")
+        rows = store.get_entries(conn, "d", recursive=True)
         names = sorted(r.file_name for r in rows)
         assert names == ["nested.png", "root.png", "sub.png"]
 
@@ -60,7 +60,7 @@ class TestRecursiveQuery:
         store.upsert_folder(conn, "d_other", now=1000)
         store.upsert_entry(conn, _entry("d", "a.png"))
         store.upsert_entry(conn, _entry("d_other", "b.png"))
-        rows = store.get_entries_recursive(conn, "d")
+        rows = store.get_entries(conn, "d", recursive=True)
         assert {r.file_name for r in rows} == {"a.png"}
 
 
@@ -70,7 +70,7 @@ class TestDelete:
         store.upsert_entry(conn, _entry("d", "a.png"))
         store.upsert_entry(conn, _entry("d", "b.png"))
         store.delete_entries(conn, [("d", "a.png")])
-        rows = store.get_entries_recursive(conn, "d")
+        rows = store.get_entries(conn, "d", recursive=True)
         assert {r.file_name for r in rows} == {"b.png"}
 
     def test_delete_folders_under_cascades(self, conn):
@@ -79,7 +79,7 @@ class TestDelete:
         store.upsert_entry(conn, _entry("d", "a.png"))
         store.upsert_entry(conn, _entry("d/sub", "b.png"))
         store.delete_folders_under(conn, "d")
-        rows = store.get_entries_recursive(conn, "d")
+        rows = store.get_entries(conn, "d", recursive=True)
         assert rows == []
 
 

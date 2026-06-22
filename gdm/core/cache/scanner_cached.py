@@ -129,7 +129,7 @@ def process_diff_sync(
         on_batch_updated: 可选回调 fn(List[CachedEntry])
     """
     norm_root = normalize_folder(root)
-    cached = store.get_entries_recursive(conn, norm_root)
+    cached = store.get_entries(conn, norm_root, recursive=True)
     current = snapshot_folder(root)
     added, changed, removed = compute_diff(cached, current)
 

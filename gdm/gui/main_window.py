@@ -305,7 +305,7 @@ class MainWindow(QMainWindow):
                 cache_store.touch_folders_under(
                     conn, norm, now=int(__import__("time").time())
                 )
-                entries = cache_store.get_entries_recursive(conn, norm)
+                entries = cache_store.get_entries(conn, norm, recursive=False)
             finally:
                 conn.close()
         except Exception as e:

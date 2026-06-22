@@ -77,8 +77,9 @@ class TestProcessDiffSync:
         db.init_schema(conn)
         try:
             process_diff_sync(conn, str(tmp_path))
-            rows = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             assert {r.file_name for r in rows} == {"a.png", "b.png"}
             # 缩略图已生成
@@ -93,14 +94,16 @@ class TestProcessDiffSync:
         db.init_schema(conn)
         try:
             process_diff_sync(conn, str(tmp_path))
-            rows1 = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows1 = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             mtime_before = rows1[0].mtime_ns
 
             process_diff_sync(conn, str(tmp_path))
-            rows2 = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows2 = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             assert len(rows2) == 1
             assert rows2[0].mtime_ns == mtime_before
@@ -124,8 +127,9 @@ class TestProcessDiffSync:
             new_mtime = os.stat(target).st_mtime_ns
 
             process_diff_sync(conn, str(tmp_path))
-            rows = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             assert len(rows) == 1
             assert rows[0].mtime_ns == new_mtime
@@ -144,8 +148,9 @@ class TestProcessDiffSync:
             process_diff_sync(conn, str(tmp_path))
             f.unlink()
             process_diff_sync(conn, str(tmp_path))
-            rows = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             assert {r.file_name for r in rows} == {"b.png"}
         finally:
@@ -160,8 +165,9 @@ class TestProcessDiffSync:
         db.init_schema(conn)
         try:
             process_diff_sync(conn, str(tmp_path))
-            rows = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             b_before = next(r for r in rows if r.file_name == "b.png")
 
@@ -171,8 +177,9 @@ class TestProcessDiffSync:
             _make_png(tmp_path / "sub_a" / "a.png", color=(0, 0, 255, 255))
             process_diff_sync(conn, str(tmp_path))
 
-            rows2 = store.get_entries_recursive(
-                conn, normalize_folder(str(tmp_path))
+            rows2 = store.get_entries(
+                conn, normalize_folder(str(tmp_path)),
+                recursive=True
             )
             b_after = next(r for r in rows2 if r.file_name == "b.png")
             assert b_before.mtime_ns == b_after.mtime_ns
