@@ -183,7 +183,7 @@ def process_diff_sync(
     )
     store.mark_scan_done(conn, all_folders, now)
     store.evict_lru_if_needed(conn)
-    store.update_folder_counts(conn, norm_root)
+    store.update_folder_counts(conn, norm_root, recursive=True)
 
 
 # ---------------------------------------------------------------------- #

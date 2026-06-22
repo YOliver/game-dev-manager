@@ -137,7 +137,7 @@ class TestUpdateFolderCounts:
         store.upsert_entry(conn, _entry("d/sub/nested", "d.png"))
         conn.commit()
 
-        store.update_folder_counts(conn, "d")
+        store.update_folder_counts(conn, "d", recursive=True)
 
         rows = {
             r[0]: r[1]
@@ -151,7 +151,7 @@ class TestUpdateFolderCounts:
         store.upsert_folder(conn, "d", now=1000)
         conn.commit()
 
-        store.update_folder_counts(conn, "d")
+        store.update_folder_counts(conn, "d", recursive=True)
 
         (count,) = conn.execute(
             "SELECT entry_count FROM folders WHERE folder_path = ?", ("d",)
@@ -164,7 +164,7 @@ class TestUpdateFolderCounts:
         store.upsert_entry(conn, _entry("d", "a.png"))
         conn.commit()
 
-        store.update_folder_counts(conn, "d")
+        store.update_folder_counts(conn, "d", recursive=True)
 
         (other_count,) = conn.execute(
             "SELECT entry_count FROM folders WHERE folder_path = ?", ("other",)
@@ -178,7 +178,7 @@ class TestUpdateFolderCounts:
         store.upsert_entry(conn, _entry("d/sub/deep", "x.png"))
         conn.commit()
 
-        store.update_folder_counts(conn, "d")
+        store.update_folder_counts(conn, "d", recursive=True)
 
         # d 和 d/sub 应被自动补行
         rows = {

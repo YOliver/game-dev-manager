@@ -236,17 +236,36 @@ def _ensure_ancestor_folders(conn: sqlite3.Connection, root: str) -> None:
     conn.commit()
 
 
-def update_folder_counts(conn: sqlite3.Connection, root: str) -> None:
-    """统计 root 下各目录的递归 entry 数量并更新 folders.entry_count。"""
+def update_folder_counts(
+    conn: sqlite3.Connection, root: str, *, recursive: bool = False
+) -> None:
+    """统计 root 下各目录的 entry 数量并更新 folders.entry_count。
+
+    Args:
+        conn: 数据库连接
+        root: 目录路径（已规范化）
+        recursive: True 时递归统计子目录；False 时仅统计当前目录
+    """
     _ensure_ancestor_folders(conn, root)
-    conn.execute("""
-        UPDATE folders
-        SET entry_count = (
-            SELECT COUNT(*)
-            FROM entries
-            WHERE entries.folder_path = folders.folder_path
-               OR entries.folder_path LIKE (folders.folder_path || '/%')
-        )
-        WHERE folder_path = ? OR folder_path LIKE ?
-    """, (root, root + "/%"))
+    if recursive:
+        conn.execute("""
+            UPDATE folders
+            SET entry_count = (
+                SELECT COUNT(*)
+                FROM entries
+                WHERE entries.folder_path = folders.folder_path
+                   OR entries.folder_path LIKE (folders.folder_path || '/%')
+            )
+            WHERE folder_path = ? OR folder_path LIKE ?
+        """, (root, root + "/%"))
+    else:
+        conn.execute("""
+            UPDATE folders
+            SET entry_count = (
+                SELECT COUNT(*)
+                FROM entries
+                WHERE entries.folder_path = folders.folder_path
+            )
+            WHERE folder_path = ?
+        """, (root,))
     conn.commit()
