@@ -84,21 +84,42 @@ def upsert_entry(conn: sqlite3.Connection, e: CachedEntry) -> None:
     )
 
 
-def get_entries_recursive(
-    conn: sqlite3.Connection, root: str
+def get_entries(
+    conn: sqlite3.Connection, root: str, *, recursive: bool = False
 ) -> List[CachedEntry]:
-    """返回 root 及其后代叶子目录下的所有缓存条目。"""
-    prefix = root + "/%"
-    rows = conn.execute(
-        """
-        SELECT folder_path, file_name, mtime_ns, size,
-               width, height, format, color_mode,
-               thumb_blob, thumb_mtime_ns
-        FROM entries
-        WHERE folder_path = ? OR folder_path LIKE ?
-        """,
-        (root, prefix),
-    ).fetchall()
+    """返回 root 下的缓存条目。
+
+    Args:
+        conn: 数据库连接
+        root: 目录路径（已规范化）
+        recursive: True 时递归包含所有子目录；False 时仅当前目录
+
+    Returns:
+        CachedEntry 列表
+    """
+    if recursive:
+        prefix = root + "/%"
+        rows = conn.execute(
+            """
+            SELECT folder_path, file_name, mtime_ns, size,
+                   width, height, format, color_mode,
+                   thumb_blob, thumb_mtime_ns
+            FROM entries
+            WHERE folder_path = ? OR folder_path LIKE ?
+            """,
+            (root, prefix),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT folder_path, file_name, mtime_ns, size,
+                   width, height, format, color_mode,
+                   thumb_blob, thumb_mtime_ns
+            FROM entries
+            WHERE folder_path = ?
+            """,
+            (root,),
+        ).fetchall()
     return [
         CachedEntry(
             folder_path=r[0], file_name=r[1], mtime_ns=r[2], size=r[3],
