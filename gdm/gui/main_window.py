@@ -199,7 +199,7 @@ class MainWindow(QMainWindow):
                 self.thumbnail_view.update_progress(current, total)
                 QApplication.processEvents()  # 刷新进度条并处理 UI 事件
 
-            sprites = scan_with_progress(folder, recursive=True,
+            sprites = scan_with_progress(folder, recursive=False,
                                          progress_callback=progress_callback)
             on_finished(sprites)
         except Exception as e:
