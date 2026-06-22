@@ -188,6 +188,38 @@ class TestProcessDiffSync:
             conn.close()
 
 
+class TestSnapshotFolderNonRecursive:
+    def test_only_current_dir(self, tmp_path):
+        _make_png(tmp_path / "a.png")
+        _make_png(tmp_path / "sub" / "b.png")
+        snaps = snapshot_folder(str(tmp_path), recursive=False)
+        names = sorted(s.file_name for s in snaps)
+        assert names == ["a.png"]
+
+    def test_all_folder_paths_are_root(self, tmp_path):
+        _make_png(tmp_path / "a.png")
+        _make_png(tmp_path / "sub" / "b.png")
+        snaps = snapshot_folder(str(tmp_path), recursive=False)
+        norm_root = normalize_folder(str(tmp_path))
+        for s in snaps:
+            assert s.folder_path == norm_root
+
+
+class TestProcessDiffSyncNonRecursive:
+    def test_only_current_dir_stored(self, tmp_path):
+        _make_png(tmp_path / "a.png")
+        _make_png(tmp_path / "sub" / "b.png")
+        db_path = tmp_path / "cache.db"
+        conn = db.open_connection(db_path)
+        db.init_schema(conn)
+        try:
+            process_diff_sync(conn, str(tmp_path), recursive=False)
+            rows = store.get_entries(conn, normalize_folder(str(tmp_path)), recursive=False)
+            assert {r.file_name for r in rows} == {"a.png"}
+        finally:
+            conn.close()
+
+
 class TestDiffWorkerEndToEnd:
     """用 pytest-qt 跑真实 DiffWorker，验证信号 + DB 落地。"""
 

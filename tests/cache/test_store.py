@@ -192,3 +192,35 @@ class TestUpdateFolderCounts:
             "d/sub": 1,
             "d/sub/deep": 1,
         }
+
+
+class TestNonRecursiveQuery:
+    def test_only_current_folder(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.upsert_entry(conn, _entry("d", "root.png"))
+        store.upsert_entry(conn, _entry("d/sub", "sub.png"))
+        rows = store.get_entries(conn, "d", recursive=False)
+        names = {r.file_name for r in rows}
+        assert names == {"root.png"}
+
+    def test_empty_when_no_direct_files(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.upsert_entry(conn, _entry("d/sub", "sub.png"))
+        rows = store.get_entries(conn, "d", recursive=False)
+        assert rows == []
+
+
+class TestUpdateFolderCountsNonRecursive:
+    def test_only_current_folder_count(self, conn):
+        store.upsert_folder(conn, "d", now=1000)
+        store.upsert_folder(conn, "d/sub", now=1000)
+        store.upsert_entry(conn, _entry("d", "a.png"))
+        store.upsert_entry(conn, _entry("d/sub", "b.png"))
+        conn.commit()
+        store.update_folder_counts(conn, "d", recursive=False)
+        (count,) = conn.execute(
+            "SELECT entry_count FROM folders WHERE folder_path = ?", ("d",)
+        ).fetchone()
+        assert count == 1  # 仅 a.png，不包含 b.png
