@@ -33,14 +33,14 @@ class TestSnapshotFolder:
         _make_png(tmp_path / "a.png")
         _make_png(tmp_path / "sub" / "b.png")
         _make_png(tmp_path / "sub" / "nested" / "c.png")
-        snaps = snapshot_folder(str(tmp_path))
+        snaps = snapshot_folder(str(tmp_path), recursive=True)
         names = sorted(s.file_name for s in snaps)
         assert names == ["a.png", "b.png", "c.png"]
 
     def test_filters_non_image_files(self, tmp_path):
         _make_png(tmp_path / "a.png")
         (tmp_path / "readme.txt").write_text("not image")
-        snaps = snapshot_folder(str(tmp_path))
+        snaps = snapshot_folder(str(tmp_path), recursive=True)
         assert [s.file_name for s in snaps] == ["a.png"]
 
     def test_returns_empty_on_missing_dir(self, tmp_path):
@@ -52,7 +52,7 @@ class TestSnapshotFolder:
         _make_png(tmp_path / "normal.png")
         (tmp_path / "._apple_double.png").write_bytes(b"fake png")
         (tmp_path / ".hidden.png").write_bytes(b"fake png")
-        snaps = snapshot_folder(str(tmp_path))
+        snaps = snapshot_folder(str(tmp_path), recursive=True)
         assert [s.file_name for s in snaps] == ["normal.png"]
 
     def test_does_not_skip_hidden_dirs(self, tmp_path):
@@ -61,7 +61,7 @@ class TestSnapshotFolder:
         hidden_dir.mkdir()
         _make_png(hidden_dir / "real_texture.png")
         (hidden_dir / "._real_texture.png").write_bytes(b"fake png")
-        snaps = snapshot_folder(str(tmp_path))
+        snaps = snapshot_folder(str(tmp_path), recursive=True)
         assert [s.file_name for s in snaps] == ["real_texture.png"]
 
 

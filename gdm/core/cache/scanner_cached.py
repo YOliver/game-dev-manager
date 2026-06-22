@@ -44,28 +44,61 @@ def normalize_folder(p: str) -> str:
 # 文件系统快照
 # ---------------------------------------------------------------------- #
 
-def snapshot_folder(root: str) -> List[FileSnapshot]:
-    """递归列出 root 下所有图片文件，返回 FileSnapshot 列表。
+def snapshot_folder(root: str, *, recursive: bool = False) -> List[FileSnapshot]:
+    """列出 root 下的图片文件快照。
 
-    遇到不可读目录 / 文件时跳过，不抛异常。
+    Args:
+        root: 目录路径
+        recursive: True 时递归遍历子目录；False 时仅当前目录
+
+    Returns:
+        FileSnapshot 列表
     """
     out: List[FileSnapshot] = []
     if not os.path.isdir(root):
         return out
-    for sub_dir, _dirs, files in os.walk(root):
-        for fname in files:
+
+    if recursive:
+        # 保留原有的 os.walk 递归逻辑
+        for sub_dir, _dirs, files in os.walk(root):
+            for fname in files:
+                if fname.startswith("."):
+                    continue
+                ext = os.path.splitext(fname)[1].lower()
+                if ext not in SUPPORTED_EXTENSIONS:
+                    continue
+                full = os.path.join(sub_dir, fname)
+                try:
+                    st = os.stat(full)
+                except OSError:
+                    continue
+                out.append(FileSnapshot(
+                    folder_path=normalize_folder(sub_dir),
+                    file_name=fname,
+                    mtime_ns=st.st_mtime_ns,
+                    size=st.st_size,
+                ))
+    else:
+        # 新逻辑：仅列当前目录
+        try:
+            entries = os.listdir(root)
+        except OSError:
+            return out
+        for fname in entries:
             if fname.startswith("."):
+                continue
+            full = os.path.join(root, fname)
+            if not os.path.isfile(full):
                 continue
             ext = os.path.splitext(fname)[1].lower()
             if ext not in SUPPORTED_EXTENSIONS:
                 continue
-            full = os.path.join(sub_dir, fname)
             try:
                 st = os.stat(full)
             except OSError:
                 continue
             out.append(FileSnapshot(
-                folder_path=normalize_folder(sub_dir),
+                folder_path=normalize_folder(root),
                 file_name=fname,
                 mtime_ns=st.st_mtime_ns,
                 size=st.st_size,
@@ -130,7 +163,7 @@ def process_diff_sync(
     """
     norm_root = normalize_folder(root)
     cached = store.get_entries(conn, norm_root, recursive=True)
-    current = snapshot_folder(root)
+    current = snapshot_folder(root, recursive=True)
     added, changed, removed = compute_diff(cached, current)
 
     now = int(time.time())
