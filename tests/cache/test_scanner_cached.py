@@ -76,7 +76,7 @@ class TestProcessDiffSync:
         conn = db.open_connection(db_path)
         db.init_schema(conn)
         try:
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             rows = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
                 recursive=True
@@ -93,14 +93,14 @@ class TestProcessDiffSync:
         conn = db.open_connection(db_path)
         db.init_schema(conn)
         try:
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             rows1 = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
                 recursive=True
             )
             mtime_before = rows1[0].mtime_ns
 
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             rows2 = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
                 recursive=True
@@ -118,7 +118,7 @@ class TestProcessDiffSync:
         conn = db.open_connection(db_path)
         db.init_schema(conn)
         try:
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
 
             # 改写文件并强制 mtime 变化
             import os, time
@@ -126,7 +126,7 @@ class TestProcessDiffSync:
             _make_png(target, color=(0, 255, 0, 255))
             new_mtime = os.stat(target).st_mtime_ns
 
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             rows = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
                 recursive=True
@@ -145,9 +145,9 @@ class TestProcessDiffSync:
         conn = db.open_connection(db_path)
         db.init_schema(conn)
         try:
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             f.unlink()
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             rows = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
                 recursive=True
@@ -164,7 +164,7 @@ class TestProcessDiffSync:
         conn = db.open_connection(db_path)
         db.init_schema(conn)
         try:
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
             rows = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
                 recursive=True
@@ -175,7 +175,7 @@ class TestProcessDiffSync:
             import time
             time.sleep(0.05)
             _make_png(tmp_path / "sub_a" / "a.png", color=(0, 0, 255, 255))
-            process_diff_sync(conn, str(tmp_path))
+            process_diff_sync(conn, str(tmp_path), recursive=True)
 
             rows2 = store.get_entries(
                 conn, normalize_folder(str(tmp_path)),
@@ -205,7 +205,7 @@ class TestDiffWorkerEndToEnd:
         _make_png(tmp_path / "a.png")
         _make_png(tmp_path / "sub" / "b.png")
 
-        worker = DiffWorker(str(tmp_path))
+        worker = DiffWorker(str(tmp_path), recursive=True)
         updated_batches = []
         removed_batches = []
         done_roots = []

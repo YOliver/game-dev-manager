@@ -149,6 +149,8 @@ def process_diff_sync(
     cancelled: Optional[threading.Event] = None,
     on_removed=None,
     on_batch_updated=None,
+    *,
+    recursive: bool = False,
 ) -> None:
     """对 root 做一次完整 diff 并写回 DB。
 
@@ -160,10 +162,11 @@ def process_diff_sync(
         cancelled: 可选取消事件；每张图前检查
         on_removed: 可选回调 fn(List[(folder, name)])
         on_batch_updated: 可选回调 fn(List[CachedEntry])
+        recursive: True 时递归diff子目录；False 时仅当前目录
     """
     norm_root = normalize_folder(root)
-    cached = store.get_entries(conn, norm_root, recursive=True)
-    current = snapshot_folder(root, recursive=True)
+    cached = store.get_entries(conn, norm_root, recursive=recursive)
+    current = snapshot_folder(root, recursive=recursive)
     added, changed, removed = compute_diff(cached, current)
 
     now = int(time.time())
@@ -209,14 +212,17 @@ def process_diff_sync(
             on_batch_updated(list(batch))
 
     # 标记所有涉及的叶子目录扫描完成
-    all_folders = (
-        touched_folders
-        | {snap.folder_path for snap in current}
-        | {norm_root}
-    )
+    if recursive:
+        all_folders = (
+            touched_folders
+            | {snap.folder_path for snap in current}
+            | {norm_root}
+        )
+    else:
+        all_folders = {norm_root}
     store.mark_scan_done(conn, all_folders, now)
     store.evict_lru_if_needed(conn)
-    store.update_folder_counts(conn, norm_root, recursive=True)
+    store.update_folder_counts(conn, norm_root, recursive=recursive)
 
 
 # ---------------------------------------------------------------------- #
@@ -234,11 +240,12 @@ class _WorkerSignals(QObject):
 class DiffWorker(QRunnable):
     """后台 diff 任务（QThreadPool 调度）。"""
 
-    def __init__(self, root: str) -> None:
+    def __init__(self, root: str, *, recursive: bool = False) -> None:
         super().__init__()
         self.root = root
         self.signals = _WorkerSignals()
         self._cancelled = threading.Event()
+        self.recursive = recursive
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -258,6 +265,7 @@ class DiffWorker(QRunnable):
                 cancelled=self._cancelled,
                 on_removed=self.signals.entries_removed.emit,
                 on_batch_updated=self.signals.entries_updated.emit,
+                recursive=self.recursive,
             )
         except sqlite3.OperationalError as e:
             # 写入失败（磁盘满等）：log 后继续，不阻断 UI

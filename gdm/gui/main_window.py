@@ -326,7 +326,7 @@ class MainWindow(QMainWindow):
             self._current_sprites = []
 
         # 2) 启动后台 DiffWorker
-        worker = DiffWorker(folder_path)
+        worker = DiffWorker(folder_path, recursive=False)
         worker.signals.entries_updated.connect(
             self.thumbnail_view.apply_entries_updated
         )
